@@ -1,0 +1,18 @@
+{
+  "name": "solana-sdk",
+  "version": "1.0.0",
+  "description": "Systems-grade SDK that improves RPC and transaction reliability for Solana dApps.",
+  "license": "ISC",
+  "author": "",
+  "type": "commonjs",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "@solana/kit": "^6.9.0"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.3"
+  }
+}
