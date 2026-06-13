@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<coverage generated="1781350697264" clover="3.2.0">
-  <project timestamp="1781350697264" name="All files">
-    <metrics statements="217" coveredstatements="136" conditionals="77" coveredconditionals="54" methods="102" coveredmethods="45" elements="396" coveredelements="235" complexity="0" loc="217" ncloc="217" packages="11" files="31" classes="31"/>
+<coverage generated="1781357549958" clover="3.2.0">
+  <project timestamp="1781357549958" name="All files">
+    <metrics statements="217" coveredstatements="170" conditionals="77" coveredconditionals="71" methods="102" coveredmethods="61" elements="396" coveredelements="302" complexity="0" loc="217" ncloc="217" packages="11" files="31" classes="31"/>
     <package name="src">
       <metrics statements="0" coveredstatements="0" conditionals="0" coveredconditionals="0" methods="0" coveredmethods="0"/>
       <file name="index.ts" path="/home/yutiuser/projects/solana/solana-sdk/src/index.ts">
@@ -20,49 +20,49 @@
       </file>
     </package>
     <package name="src.core">
-      <metrics statements="28" coveredstatements="17" conditionals="17" coveredconditionals="9" methods="16" coveredmethods="8"/>
+      <metrics statements="28" coveredstatements="28" conditionals="17" coveredconditionals="16" methods="16" coveredmethods="16"/>
       <file name="clock.ts" path="/home/yutiuser/projects/solana/solana-sdk/src/core/clock.ts">
-        <metrics statements="2" coveredstatements="0" conditionals="0" coveredconditionals="0" methods="2" coveredmethods="0"/>
-        <line num="23" count="0" type="stmt"/>
-        <line num="25" count="0" type="stmt"/>
+        <metrics statements="2" coveredstatements="2" conditionals="0" coveredconditionals="0" methods="2" coveredmethods="2"/>
+        <line num="23" count="4" type="stmt"/>
+        <line num="25" count="5" type="stmt"/>
       </file>
       <file name="error.ts" path="/home/yutiuser/projects/solana/solana-sdk/src/core/error.ts">
-        <metrics statements="13" coveredstatements="9" conditionals="13" coveredconditionals="5" methods="3" coveredmethods="2"/>
-        <line num="47" count="26" type="cond" truecount="4" falsecount="0"/>
-        <line num="50" count="26" type="stmt"/>
-        <line num="51" count="26" type="stmt"/>
-        <line num="52" count="26" type="stmt"/>
-        <line num="53" count="26" type="stmt"/>
-        <line num="54" count="26" type="stmt"/>
-        <line num="55" count="26" type="stmt"/>
-        <line num="57" count="26" type="stmt"/>
-        <line num="64" count="5" type="cond" truecount="1" falsecount="1"/>
-        <line num="72" count="0" type="cond" truecount="0" falsecount="4"/>
-        <line num="73" count="0" type="stmt"/>
-        <line num="75" count="0" type="cond" truecount="0" falsecount="2"/>
-        <line num="76" count="0" type="stmt"/>
+        <metrics statements="13" coveredstatements="13" conditionals="13" coveredconditionals="12" methods="3" coveredmethods="3"/>
+        <line num="46" count="52" type="cond" truecount="4" falsecount="0"/>
+        <line num="49" count="52" type="stmt"/>
+        <line num="50" count="52" type="stmt"/>
+        <line num="51" count="52" type="stmt"/>
+        <line num="52" count="52" type="stmt"/>
+        <line num="53" count="52" type="stmt"/>
+        <line num="54" count="52" type="stmt"/>
+        <line num="56" count="52" type="stmt"/>
+        <line num="63" count="15" type="cond" truecount="1" falsecount="1"/>
+        <line num="71" count="6" type="cond" truecount="4" falsecount="0"/>
+        <line num="72" count="1" type="stmt"/>
+        <line num="74" count="5" type="cond" truecount="2" falsecount="0"/>
+        <line num="75" count="6" type="stmt"/>
       </file>
       <file name="random.ts" path="/home/yutiuser/projects/solana/solana-sdk/src/core/random.ts">
-        <metrics statements="2" coveredstatements="0" conditionals="0" coveredconditionals="0" methods="2" coveredmethods="0"/>
-        <line num="22" count="0" type="stmt"/>
-        <line num="24" count="0" type="stmt"/>
+        <metrics statements="2" coveredstatements="2" conditionals="0" coveredconditionals="0" methods="2" coveredmethods="2"/>
+        <line num="22" count="3" type="stmt"/>
+        <line num="24" count="21" type="stmt"/>
       </file>
       <file name="result.ts" path="/home/yutiuser/projects/solana/solana-sdk/src/core/result.ts">
         <metrics statements="8" coveredstatements="8" conditionals="4" coveredconditionals="4" methods="6" coveredmethods="6"/>
-        <line num="20" count="24" type="stmt"/>
-        <line num="27" count="12" type="stmt"/>
-        <line num="34" count="28" type="stmt"/>
-        <line num="41" count="14" type="stmt"/>
+        <line num="20" count="51" type="stmt"/>
+        <line num="27" count="14" type="stmt"/>
+        <line num="34" count="56" type="stmt"/>
+        <line num="41" count="18" type="stmt"/>
         <line num="51" count="2" type="cond" truecount="2" falsecount="0"/>
         <line num="59" count="2" type="cond" truecount="2" falsecount="0"/>
         <line num="60" count="1" type="stmt"/>
         <line num="62" count="1" type="stmt"/>
       </file>
       <file name="timer.ts" path="/home/yutiuser/projects/solana/solana-sdk/src/core/timer.ts">
-        <metrics statements="3" coveredstatements="0" conditionals="0" coveredconditionals="0" methods="3" coveredmethods="0"/>
-        <line num="28" count="0" type="stmt"/>
-        <line num="30" count="0" type="stmt"/>
-        <line num="33" count="0" type="stmt"/>
+        <metrics statements="3" coveredstatements="3" conditionals="0" coveredconditionals="0" methods="3" coveredmethods="3"/>
+        <line num="28" count="6" type="stmt"/>
+        <line num="30" count="5" type="stmt"/>
+        <line num="33" count="2" type="stmt"/>
       </file>
     </package>
     <package name="src.fee">
@@ -102,62 +102,62 @@
       </file>
     </package>
     <package name="src.rpc">
-      <metrics statements="113" coveredstatements="84" conditionals="50" coveredconditionals="36" methods="36" coveredmethods="23"/>
+      <metrics statements="113" coveredstatements="107" conditionals="50" coveredconditionals="46" methods="36" coveredmethods="31"/>
       <file name="circuit-breaker.ts" path="/home/yutiuser/projects/solana/solana-sdk/src/rpc/circuit-breaker.ts">
         <metrics statements="7" coveredstatements="7" conditionals="4" coveredconditionals="4" methods="4" coveredmethods="4"/>
-        <line num="23" count="3" type="stmt"/>
-        <line num="39" count="5" type="stmt"/>
-        <line num="56" count="7" type="cond" truecount="2" falsecount="0"/>
-        <line num="70" count="3" type="cond" truecount="2" falsecount="0"/>
-        <line num="72" count="2" type="stmt"/>
-        <line num="73" count="2" type="stmt"/>
+        <line num="23" count="4" type="stmt"/>
+        <line num="39" count="12" type="stmt"/>
+        <line num="56" count="11" type="cond" truecount="2" falsecount="0"/>
+        <line num="70" count="6" type="cond" truecount="2" falsecount="0"/>
+        <line num="72" count="5" type="stmt"/>
+        <line num="73" count="5" type="stmt"/>
         <line num="78" count="1" type="stmt"/>
       </file>
       <file name="endpoint.ts" path="/home/yutiuser/projects/solana/solana-sdk/src/rpc/endpoint.ts">
-        <metrics statements="20" coveredstatements="16" conditionals="12" coveredconditionals="8" methods="7" coveredmethods="5"/>
-        <line num="20" count="13" type="cond" truecount="2" falsecount="0"/>
-        <line num="23" count="13" type="cond" truecount="2" falsecount="0"/>
-        <line num="24" count="12" type="stmt"/>
-        <line num="28" count="13" type="cond" truecount="4" falsecount="0"/>
-        <line num="29" count="1" type="stmt"/>
-        <line num="32" count="12" type="stmt"/>
-        <line num="33" count="12" type="stmt"/>
-        <line num="35" count="2" type="stmt"/>
-        <line num="38" count="10" type="stmt"/>
-        <line num="47" count="49" type="stmt"/>
-        <line num="49" count="49" type="stmt"/>
-        <line num="60" count="41" type="stmt"/>
-        <line num="79" count="3" type="stmt"/>
-        <line num="81" count="3" type="stmt"/>
-        <line num="84" count="3" type="stmt"/>
-        <line num="103" count="4" type="stmt"/>
-        <line num="119" count="0" type="cond" truecount="0" falsecount="2"/>
-        <line num="120" count="0" type="stmt"/>
-        <line num="122" count="0" type="stmt"/>
-        <line num="135" count="0" type="cond" truecount="0" falsecount="2"/>
+        <metrics statements="20" coveredstatements="20" conditionals="12" coveredconditionals="12" methods="7" coveredmethods="7"/>
+        <line num="22" count="31" type="cond" truecount="2" falsecount="0"/>
+        <line num="23" count="31" type="stmt"/>
+        <line num="31" count="31" type="cond" truecount="4" falsecount="0"/>
+        <line num="32" count="1" type="stmt"/>
+        <line num="35" count="30" type="stmt"/>
+        <line num="36" count="30" type="stmt"/>
+        <line num="38" count="30" type="stmt"/>
+        <line num="40" count="3" type="stmt"/>
+        <line num="43" count="27" type="stmt"/>
+        <line num="52" count="111" type="stmt"/>
+        <line num="54" count="111" type="stmt"/>
+        <line num="65" count="102" type="stmt"/>
+        <line num="84" count="12" type="stmt"/>
+        <line num="86" count="12" type="stmt"/>
+        <line num="89" count="12" type="stmt"/>
+        <line num="108" count="10" type="stmt"/>
+        <line num="124" count="3" type="cond" truecount="2" falsecount="0"/>
+        <line num="125" count="2" type="stmt"/>
+        <line num="127" count="1" type="stmt"/>
+        <line num="140" count="4" type="cond" truecount="2" falsecount="0"/>
       </file>
       <file name="registry.ts" path="/home/yutiuser/projects/solana/solana-sdk/src/rpc/registry.ts">
-        <metrics statements="21" coveredstatements="20" conditionals="8" coveredconditionals="7" methods="6" coveredmethods="6"/>
-        <line num="24" count="5" type="cond" truecount="4" falsecount="0"/>
+        <metrics statements="21" coveredstatements="21" conditionals="8" coveredconditionals="8" methods="6" coveredmethods="6"/>
+        <line num="24" count="13" type="cond" truecount="4" falsecount="0"/>
         <line num="25" count="1" type="stmt"/>
-        <line num="29" count="4" type="stmt"/>
-        <line num="30" count="4" type="stmt"/>
-        <line num="32" count="4" type="stmt"/>
-        <line num="33" count="6" type="stmt"/>
-        <line num="34" count="6" type="cond" truecount="1" falsecount="1"/>
-        <line num="35" count="0" type="stmt"/>
-        <line num="38" count="6" type="stmt"/>
-        <line num="39" count="6" type="stmt"/>
-        <line num="42" count="6" type="cond" truecount="2" falsecount="0"/>
-        <line num="43" count="5" type="stmt"/>
-        <line num="44" count="5" type="stmt"/>
-        <line num="49" count="5" type="stmt"/>
-        <line num="51" count="4" type="stmt"/>
-        <line num="58" count="4" type="stmt"/>
-        <line num="61" count="4" type="stmt"/>
-        <line num="62" count="5" type="stmt"/>
-        <line num="67" count="4" type="stmt"/>
-        <line num="71" count="1" type="stmt"/>
+        <line num="29" count="12" type="stmt"/>
+        <line num="30" count="12" type="stmt"/>
+        <line num="32" count="12" type="stmt"/>
+        <line num="33" count="18" type="stmt"/>
+        <line num="34" count="18" type="cond" truecount="2" falsecount="0"/>
+        <line num="35" count="1" type="stmt"/>
+        <line num="38" count="17" type="stmt"/>
+        <line num="39" count="17" type="stmt"/>
+        <line num="42" count="17" type="cond" truecount="2" falsecount="0"/>
+        <line num="43" count="15" type="stmt"/>
+        <line num="44" count="15" type="stmt"/>
+        <line num="49" count="14" type="stmt"/>
+        <line num="51" count="11" type="stmt"/>
+        <line num="58" count="11" type="stmt"/>
+        <line num="61" count="11" type="stmt"/>
+        <line num="62" count="14" type="stmt"/>
+        <line num="67" count="12" type="stmt"/>
+        <line num="71" count="3" type="stmt"/>
         <line num="75" count="1" type="stmt"/>
       </file>
       <file name="resilient-client.ts" path="/home/yutiuser/projects/solana/solana-sdk/src/rpc/resilient-client.ts">
@@ -167,72 +167,72 @@
       </file>
       <file name="retry.ts" path="/home/yutiuser/projects/solana/solana-sdk/src/rpc/retry.ts">
         <metrics statements="11" coveredstatements="11" conditionals="4" coveredconditionals="4" methods="2" coveredmethods="2"/>
-        <line num="28" count="4" type="cond" truecount="2" falsecount="0"/>
+        <line num="28" count="15" type="cond" truecount="2" falsecount="0"/>
         <line num="29" count="1" type="stmt"/>
-        <line num="33" count="3" type="cond" truecount="2" falsecount="0"/>
-        <line num="34" count="1" type="stmt"/>
-        <line num="38" count="2" type="stmt"/>
-        <line num="58" count="21" type="stmt"/>
-        <line num="61" count="21" type="stmt"/>
-        <line num="64" count="21" type="stmt"/>
-        <line num="65" count="21" type="stmt"/>
-        <line num="66" count="21" type="stmt"/>
-        <line num="69" count="21" type="stmt"/>
+        <line num="33" count="14" type="cond" truecount="2" falsecount="0"/>
+        <line num="34" count="2" type="stmt"/>
+        <line num="38" count="12" type="stmt"/>
+        <line num="58" count="37" type="stmt"/>
+        <line num="61" count="37" type="stmt"/>
+        <line num="64" count="37" type="stmt"/>
+        <line num="65" count="37" type="stmt"/>
+        <line num="66" count="37" type="stmt"/>
+        <line num="69" count="37" type="stmt"/>
       </file>
       <file name="scoring.ts" path="/home/yutiuser/projects/solana/solana-sdk/src/rpc/scoring.ts">
-        <metrics statements="27" coveredstatements="26" conditionals="14" coveredconditionals="11" methods="4" coveredmethods="4"/>
-        <line num="30" count="10" type="stmt"/>
-        <line num="33" count="10" type="stmt"/>
-        <line num="36" count="10" type="stmt"/>
-        <line num="37" count="10" type="cond" truecount="2" falsecount="0"/>
-        <line num="38" count="10" type="stmt"/>
-        <line num="41" count="10" type="cond" truecount="2" falsecount="0"/>
-        <line num="42" count="2" type="stmt"/>
-        <line num="44" count="2" type="stmt"/>
-        <line num="45" count="2" type="stmt"/>
-        <line num="48" count="10" type="stmt"/>
-        <line num="58" count="6" type="cond" truecount="2" falsecount="0"/>
-        <line num="77" count="6" type="stmt"/>
-        <line num="79" count="3" type="cond" truecount="2" falsecount="0"/>
-        <line num="80" count="1" type="stmt"/>
-        <line num="84" count="2" type="stmt"/>
-        <line num="85" count="2" type="cond" truecount="1" falsecount="1"/>
+        <metrics statements="27" coveredstatements="26" conditionals="14" coveredconditionals="12" methods="4" coveredmethods="4"/>
+        <line num="30" count="19" type="stmt"/>
+        <line num="33" count="19" type="stmt"/>
+        <line num="36" count="19" type="stmt"/>
+        <line num="37" count="19" type="cond" truecount="2" falsecount="0"/>
+        <line num="38" count="19" type="stmt"/>
+        <line num="41" count="19" type="cond" truecount="2" falsecount="0"/>
+        <line num="42" count="4" type="stmt"/>
+        <line num="44" count="4" type="stmt"/>
+        <line num="45" count="4" type="stmt"/>
+        <line num="48" count="19" type="stmt"/>
+        <line num="58" count="14" type="cond" truecount="2" falsecount="0"/>
+        <line num="77" count="11" type="stmt"/>
+        <line num="79" count="7" type="cond" truecount="2" falsecount="0"/>
+        <line num="80" count="2" type="stmt"/>
+        <line num="84" count="5" type="stmt"/>
+        <line num="85" count="5" type="cond" truecount="1" falsecount="1"/>
         <line num="86" count="0" type="stmt"/>
-        <line num="89" count="2" type="stmt"/>
-        <line num="90" count="2" type="stmt"/>
-        <line num="92" count="2" type="stmt"/>
-        <line num="93" count="1" type="stmt"/>
-        <line num="94" count="1" type="cond" truecount="1" falsecount="1"/>
-        <line num="95" count="1" type="stmt"/>
-        <line num="96" count="1" type="cond" truecount="1" falsecount="1"/>
+        <line num="89" count="5" type="stmt"/>
+        <line num="90" count="5" type="stmt"/>
+        <line num="92" count="5" type="stmt"/>
+        <line num="93" count="2" type="stmt"/>
+        <line num="94" count="2" type="cond" truecount="1" falsecount="1"/>
+        <line num="95" count="2" type="stmt"/>
+        <line num="96" count="2" type="cond" truecount="2" falsecount="0"/>
         <line num="97" count="1" type="stmt"/>
         <line num="98" count="1" type="stmt"/>
-        <line num="103" count="2" type="stmt"/>
+        <line num="103" count="5" type="stmt"/>
       </file>
       <file name="timeout.ts" path="/home/yutiuser/projects/solana/solana-sdk/src/rpc/timeout.ts">
-        <metrics statements="22" coveredstatements="4" conditionals="8" coveredconditionals="2" methods="8" coveredmethods="2"/>
+        <metrics statements="22" coveredstatements="22" conditionals="8" coveredconditionals="6" methods="8" coveredmethods="8"/>
         <line num="26" count="6" type="cond" truecount="2" falsecount="0"/>
         <line num="27" count="1" type="stmt"/>
         <line num="29" count="5" type="stmt"/>
-        <line num="40" count="3" type="stmt"/>
-        <line num="64" count="0" type="cond" truecount="0" falsecount="2"/>
-        <line num="65" count="0" type="stmt"/>
-        <line num="68" count="0" type="stmt"/>
-        <line num="70" count="0" type="stmt"/>
-        <line num="71" count="0" type="stmt"/>
-        <line num="74" count="0" type="stmt"/>
-        <line num="76" count="0" type="stmt"/>
-        <line num="77" count="0" type="stmt"/>
-        <line num="80" count="0" type="stmt"/>
-        <line num="81" count="0" type="stmt"/>
-        <line num="86" count="0" type="stmt"/>
-        <line num="87" count="0" type="cond" truecount="0" falsecount="2"/>
-        <line num="88" count="0" type="stmt"/>
-        <line num="89" count="0" type="stmt"/>
-        <line num="90" count="0" type="stmt"/>
-        <line num="95" count="0" type="stmt"/>
-        <line num="96" count="0" type="cond" truecount="0" falsecount="2"/>
-        <line num="97" count="0" type="stmt"/>
+        <line num="40" count="6" type="stmt"/>
+        <line num="64" count="9" type="cond" truecount="2" falsecount="0"/>
+        <line num="65" count="1" type="stmt"/>
+        <line num="68" count="8" type="stmt"/>
+        <line num="70" count="8" type="stmt"/>
+        <line num="71" count="8" type="stmt"/>
+        <line num="74" count="8" type="stmt"/>
+        <line num="76" count="4" type="stmt"/>
+        <line num="77" count="4" type="stmt"/>
+        <line num="80" count="2" type="stmt"/>
+        <line num="81" count="2" type="stmt"/>
+        <line num="86" count="8" type="stmt"/>
+        <line num="87" count="2" type="cond" truecount="1" falsecount="1"/>
+        <line num="88" count="2" type="stmt"/>
+        <line num="89" count="2" type="stmt"/>
+        <line num="90" count="2" type="stmt"/>
+        <line num="95" count="8" type="stmt"/>
+        <line num="96" count="6" type="cond" truecount="1" falsecount="1"/>
+        <line num="97" count="6" type="stmt"/>
       </file>
       <file name="transport.ts" path="/home/yutiuser/projects/solana/solana-sdk/src/rpc/transport.ts">
         <metrics statements="3" coveredstatements="0" conditionals="0" coveredconditionals="0" methods="3" coveredmethods="0"/>
@@ -257,20 +257,20 @@
       <metrics statements="46" coveredstatements="35" conditionals="10" coveredconditionals="9" methods="21" coveredmethods="14"/>
       <file name="fake-clock.ts" path="/home/yutiuser/projects/solana/solana-sdk/src/testing/fake-clock.ts">
         <metrics statements="5" coveredstatements="5" conditionals="1" coveredconditionals="1" methods="4" coveredmethods="4"/>
-        <line num="31" count="7" type="stmt"/>
-        <line num="33" count="7" type="stmt"/>
-        <line num="35" count="6" type="stmt"/>
-        <line num="39" count="6" type="stmt"/>
+        <line num="31" count="17" type="stmt"/>
+        <line num="33" count="17" type="stmt"/>
+        <line num="35" count="16" type="stmt"/>
+        <line num="39" count="12" type="stmt"/>
         <line num="43" count="2" type="stmt"/>
       </file>
       <file name="fake-random.ts" path="/home/yutiuser/projects/solana/solana-sdk/src/testing/fake-random.ts">
         <metrics statements="6" coveredstatements="6" conditionals="3" coveredconditionals="3" methods="3" coveredmethods="3"/>
-        <line num="26" count="9" type="stmt"/>
-        <line num="28" count="9" type="stmt"/>
-        <line num="30" count="36" type="cond" truecount="2" falsecount="0"/>
-        <line num="31" count="14" type="stmt"/>
-        <line num="33" count="22" type="stmt"/>
-        <line num="37" count="8" type="stmt"/>
+        <line num="26" count="14" type="stmt"/>
+        <line num="28" count="14" type="stmt"/>
+        <line num="30" count="49" type="cond" truecount="2" falsecount="0"/>
+        <line num="31" count="13" type="stmt"/>
+        <line num="33" count="36" type="stmt"/>
+        <line num="37" count="6" type="stmt"/>
       </file>
       <file name="fake-relay.ts" path="/home/yutiuser/projects/solana/solana-sdk/src/testing/fake-relay.ts">
         <metrics statements="1" coveredstatements="0" conditionals="0" coveredconditionals="0" methods="1" coveredmethods="0"/>
@@ -278,30 +278,30 @@
       </file>
       <file name="fake-timer.ts" path="/home/yutiuser/projects/solana/solana-sdk/src/testing/fake-timer.ts">
         <metrics statements="24" coveredstatements="24" conditionals="6" coveredconditionals="5" methods="7" coveredmethods="7"/>
-        <line num="42" count="7" type="stmt"/>
-        <line num="43" count="7" type="stmt"/>
-        <line num="44" count="7" type="stmt"/>
-        <line num="46" count="7" type="stmt"/>
-        <line num="48" count="10" type="stmt"/>
-        <line num="49" count="10" type="stmt"/>
-        <line num="50" count="10" type="stmt"/>
-        <line num="51" count="10" type="stmt"/>
-        <line num="55" count="2" type="stmt"/>
-        <line num="56" count="2" type="stmt"/>
-        <line num="57" count="2" type="cond" truecount="1" falsecount="1"/>
-        <line num="58" count="2" type="stmt"/>
-        <line num="63" count="6" type="stmt"/>
-        <line num="68" count="3" type="stmt"/>
-        <line num="69" count="6" type="stmt"/>
-        <line num="70" count="6" type="stmt"/>
-        <line num="75" count="2" type="stmt"/>
-        <line num="76" count="2" type="stmt"/>
-        <line num="79" count="2" type="stmt"/>
-        <line num="80" count="2" type="stmt"/>
-        <line num="81" count="2" type="cond" truecount="4" falsecount="0"/>
-        <line num="82" count="1" type="stmt"/>
-        <line num="83" count="1" type="stmt"/>
-        <line num="85" count="1" type="stmt"/>
+        <line num="42" count="17" type="stmt"/>
+        <line num="43" count="17" type="stmt"/>
+        <line num="44" count="17" type="stmt"/>
+        <line num="46" count="17" type="stmt"/>
+        <line num="48" count="20" type="stmt"/>
+        <line num="49" count="20" type="stmt"/>
+        <line num="50" count="20" type="stmt"/>
+        <line num="51" count="20" type="stmt"/>
+        <line num="55" count="7" type="stmt"/>
+        <line num="56" count="7" type="stmt"/>
+        <line num="57" count="7" type="cond" truecount="1" falsecount="1"/>
+        <line num="58" count="7" type="stmt"/>
+        <line num="63" count="15" type="stmt"/>
+        <line num="68" count="4" type="stmt"/>
+        <line num="69" count="7" type="stmt"/>
+        <line num="70" count="7" type="stmt"/>
+        <line num="75" count="5" type="stmt"/>
+        <line num="76" count="5" type="stmt"/>
+        <line num="79" count="5" type="stmt"/>
+        <line num="80" count="5" type="stmt"/>
+        <line num="81" count="5" type="cond" truecount="4" falsecount="0"/>
+        <line num="82" count="3" type="stmt"/>
+        <line num="83" count="3" type="stmt"/>
+        <line num="85" count="2" type="stmt"/>
       </file>
       <file name="fake-transport.ts" path="/home/yutiuser/projects/solana/solana-sdk/src/testing/fake-transport.ts">
         <metrics statements="9" coveredstatements="0" conditionals="0" coveredconditionals="0" methods="5" coveredmethods="0"/>

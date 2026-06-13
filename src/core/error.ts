@@ -42,7 +42,6 @@ export function createSdkError(
   message: string,
   opts?: { retryable?: boolean; cause?: unknown },
 ): SdkError {
-  // TODO: determine retryable flag if not provided
   const retryable =
     opts?.retryable ??
     (kind === "Timeout" || kind === "NetworkError" || kind === "RateLimited");
@@ -55,6 +54,17 @@ export function createSdkError(
   error.cause = opts?.cause;
 
   return error;
+}
+
+/**
+ * Check if a value is an SdkError.
+ */
+export function isKindOfSdkError(value: unknown): value is SdkError {
+  return (
+    value instanceof Error &&
+    typeof (value as any).kind === "string" &&
+    typeof (value as any).retryable === "boolean"
+  );
 }
 
 /**

@@ -7,18 +7,35 @@
 import type { Clock } from "../core/clock.js";
 
 /**
- * Fake clock interface (extends Clock with manual control).
+ * Fake clock class for testing.
  */
-export interface FakeClock extends Clock {
+export class FakeClock implements Clock {
+  private currentTime: number;
+
+  constructor(startMs: number = 0) {
+    this.currentTime = startMs;
+  }
+
+  /**
+   * Get the current time.
+   */
+  now(): number {
+    return this.currentTime;
+  }
+
   /**
    * Advance the clock by a number of milliseconds.
    */
-  advance(ms: number): void;
+  advance(ms: number): void {
+    this.currentTime += ms;
+  }
 
   /**
    * Set the clock to an absolute time.
    */
-  set(ms: number): void;
+  set(ms: number): void {
+    this.currentTime = ms;
+  }
 }
 
 /**
@@ -28,19 +45,5 @@ export interface FakeClock extends Clock {
  * @returns Fake clock
  */
 export function createFakeClock(startMs: number = 0): FakeClock {
-  let currentTime = startMs;
-
-  return {
-    now(): number {
-      return currentTime;
-    },
-
-    advance(ms: number): void {
-      currentTime += ms;
-    },
-
-    set(ms: number): void {
-      currentTime = ms;
-    },
-  };
+  return new FakeClock(startMs);
 }

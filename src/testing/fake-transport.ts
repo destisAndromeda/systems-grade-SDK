@@ -6,6 +6,13 @@
 
 import type { RpcTransport } from "../rpc/types.js";
 import type { SdkError } from "../core/error.js";
+import { createSdkError } from "../core/error.js";
+
+interface FakeTransportCall {
+  method: string;
+  params: unknown;
+  options?: { timeoutMs?: number };
+}
 
 /**
  * Create a fake RPC transport for testing.
@@ -13,15 +20,58 @@ import type { SdkError } from "../core/error.js";
  * @param config.endpointUrl URL for this fake endpoint
  * @param config.endpointId Unique ID for this endpoint
  * @param config.responses Map of method -> response or error
- * @returns Fake RPC transport
+ * @returns Fake RPC transport with testing helpers
  */
 export function createFakeRpcTransport(config: {
   endpointUrl: string;
   endpointId: string;
   responses?: Map<string, { success: unknown } | { error: SdkError }>;
-}): RpcTransport {
-  // TODO: create transport that returns configured responses
-  throw new Error("TODO");
+}): RpcTransport & {
+  getCalls(): FakeTransportCall[];
+  callCount(method?: string): number;
+} {
+  const calls: FakeTransportCall[] = [];
+  const responses = config.responses ?? new Map();
+
+  const transport: RpcTransport & {
+    getCalls(): FakeTransportCall[];
+    callCount(method?: string): number;
+  } = {
+    endpointUrl: config.endpointUrl,
+    endpointId: config.endpointId,
+
+    async send<TParams, TResult>(
+      method: string,
+      params: TParams,
+      options?: { timeoutMs?: number },
+    ): Promise<TResult> {
+      calls.push({ method, params, options });
+
+      const response = responses.get(method);
+      if (!response) {
+        throw createSdkError("InvalidResponse", `No mock response configured for method: ${method}`);
+      }
+
+      if ("error" in response) {
+        throw response.error;
+      }
+
+      return response.success as TResult;
+    },
+
+    getCalls(): FakeTransportCall[] {
+      return [...calls];
+    },
+
+    callCount(method?: string): number {
+      if (method === undefined) {
+        return calls.length;
+      }
+      return calls.filter((call) => call.method === method).length;
+    },
+  };
+
+  return transport;
 }
 
 /**

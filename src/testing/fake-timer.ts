@@ -7,24 +7,89 @@
 import type { Timer } from "../core/timer.js";
 import type { FakeClock } from "./fake-clock.js";
 
+interface ScheduledCallback {
+  id: number;
+  fn: () => void;
+  dueAt: number;
+}
+
 /**
- * Fake timer interface (extends Timer with manual control).
+ * Fake timer class for testing.
  */
-export interface FakeTimer extends Timer {
+export class FakeTimer implements Timer {
+  private nextId: number = 1;
+  private currentTime: number = 0;
+  private scheduled: ScheduledCallback[] = [];
+  private clock: FakeClock | undefined;
+
+  constructor(clock?: FakeClock) {
+    this.clock = clock;
+  }
+
+  /**
+   * Schedule a callback to run after a delay.
+   */
+  setTimeout(fn: () => void, ms: number): unknown {
+    const id = this.nextId++;
+    const dueAt = this.currentTime + ms;
+    this.scheduled.push({ id, fn, dueAt });
+    return id;
+  }
+
+  /**
+   * Cancel a scheduled callback.
+   */
+  clearTimeout(handle: unknown): void {
+    const id = handle as number;
+    const index = this.scheduled.findIndex((cb) => cb.id === id);
+    if (index >= 0) {
+      this.scheduled.splice(index, 1);
+    }
+  }
+
   /**
    * Get the number of pending callbacks.
    */
-  pendingCount(): number;
+  pendingCount(): number {
+    return this.scheduled.length;
+  }
 
   /**
    * Flush and execute all pending callbacks immediately.
    */
-  flushAll(): void;
+  flushAll(): void {
+    // Execute all callbacks immediately, in order they were scheduled
+    while (this.scheduled.length > 0) {
+      const cb = this.scheduled.shift()!;
+      cb.fn();
+    }
+  }
+
+  /**
+   * Async version of flushAll - executes all pending callbacks.
+   */
+  async flush(): Promise<void> {
+    this.flushAll();
+  }
 
   /**
    * Advance the timer by N milliseconds and flush callbacks whose delay has passed.
    */
-  advanceAndFlush(ms: number, clock: FakeClock): void;
+  advanceAndFlush(ms: number, clock: FakeClock): void {
+    this.currentTime += ms;
+    clock.advance(ms);
+
+    // Execute callbacks whose dueAt time has passed
+    while (this.scheduled.length > 0) {
+      const cb = this.scheduled[0];
+      if (cb && cb.dueAt <= this.currentTime) {
+        this.scheduled.shift();
+        cb.fn();
+      } else {
+        break;
+      }
+    }
+  }
 }
 
 /**
@@ -33,58 +98,5 @@ export interface FakeTimer extends Timer {
  * @returns Fake timer
  */
 export function createFakeTimer(): FakeTimer {
-  interface ScheduledCallback {
-    id: number;
-    fn: () => void;
-    dueAt: number;
-  }
-
-  let nextId = 1;
-  let currentTime = 0;
-  const scheduled: ScheduledCallback[] = [];
-
-  return {
-    setTimeout(fn: () => void, ms: number): unknown {
-      const id = nextId++;
-      const dueAt = currentTime + ms;
-      scheduled.push({ id, fn, dueAt });
-      return id;
-    },
-
-    clearTimeout(handle: unknown): void {
-      const id = handle as number;
-      const index = scheduled.findIndex((cb) => cb.id === id);
-      if (index >= 0) {
-        scheduled.splice(index, 1);
-      }
-    },
-
-    pendingCount(): number {
-      return scheduled.length;
-    },
-
-    flushAll(): void {
-      // Execute all callbacks immediately, in order they were scheduled
-      while (scheduled.length > 0) {
-        const cb = scheduled.shift()!;
-        cb.fn();
-      }
-    },
-
-    advanceAndFlush(ms: number, clock: FakeClock): void {
-      currentTime += ms;
-      clock.advance(ms);
-
-      // Execute callbacks whose dueAt time has passed
-      while (scheduled.length > 0) {
-        const cb = scheduled[0];
-        if (cb && cb.dueAt <= currentTime) {
-          scheduled.shift();
-          cb.fn();
-        } else {
-          break;
-        }
-      }
-    },
-  };
+  return new FakeTimer();
 }

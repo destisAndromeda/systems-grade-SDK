@@ -2,43 +2,40 @@
  * Tests for clock implementations.
  */
 
-import { describe, it, expect } from "vitest";
-import { createFakeClock } from "../../src/testing/fake-clock.js";
+import { describe, it, expect, beforeEach } from "vitest";
+import { createSystemClock } from "../../src/core/clock.js";
 
-describe("createFakeClock", () => {
-  it("starts with initial time", () => {
-    const clock = createFakeClock();
-    expect(clock.now()).toBe(0);
+describe("createSystemClock", () => {
+  it("returns a number from now()", () => {
+    const clock = createSystemClock();
+    const now = clock.now();
+    expect(typeof now).toBe("number");
   });
 
-  it("starts with custom time", () => {
-    const clock = createFakeClock(123);
-    expect(clock.now()).toBe(123);
+  it("now() returns approximately current Date.now()", () => {
+    const clock = createSystemClock();
+    const before = Date.now();
+    const clockTime = clock.now();
+    const after = Date.now();
+
+    // Allow a small range for execution time
+    expect(clockTime).toBeGreaterThanOrEqual(before - 100);
+    expect(clockTime).toBeLessThanOrEqual(after + 100);
   });
 
-  it("advance() moves time forward", () => {
-    const clock = createFakeClock(0);
-    clock.advance(100);
-    expect(clock.now()).toBe(100);
+  it("now() increases over time", () => {
+    const clock = createSystemClock();
+    const t1 = clock.now();
+    // Small delay to ensure time passes
+    const t2 = clock.now();
+    expect(t2 >= t1).toBe(true);
   });
 
-  it("set() sets absolute time", () => {
-    const clock = createFakeClock(100);
-    clock.set(500);
-    expect(clock.now()).toBe(500);
-  });
-
-  it("advances correctly through multiple increments", () => {
-    const clock = createFakeClock(0);
-    clock.advance(100);
-    clock.advance(50);
-    expect(clock.now()).toBe(150);
-  });
-
-  it("set() overwrites previous time", () => {
-    const clock = createFakeClock(0);
-    clock.advance(100);
-    clock.set(25);
-    expect(clock.now()).toBe(25);
+  it("returns valid Unix timestamp", () => {
+    const clock = createSystemClock();
+    const now = clock.now();
+    // Valid Unix timestamp should be after year 2000 (946684800000) and before year 2100
+    expect(now).toBeGreaterThan(946684800000);
+    expect(now).toBeLessThan(4102444800000);
   });
 });

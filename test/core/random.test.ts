@@ -3,48 +3,31 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { createFakeRandom } from "../../src/testing/fake-random.js";
+import { createMathRandomSource } from "../../src/core/random.js";
 
-describe("createFakeRandom", () => {
-  it("returns scripted sequence of values", () => {
-    const random = createFakeRandom();
-    random.pushSequence([0.5, 0.3, 0.9]);
-    expect(random.next()).toBe(0.5);
-    expect(random.next()).toBe(0.3);
-    expect(random.next()).toBe(0.9);
+describe("createMathRandomSource", () => {
+  it("returns a number from next()", () => {
+    const random = createMathRandomSource();
+    const value = random.next();
+    expect(typeof value).toBe("number");
   });
 
-  it("returns default value after sequence exhausted", () => {
-    const random = createFakeRandom(0.42);
-    random.pushSequence([0.5]);
-    expect(random.next()).toBe(0.5);
-    expect(random.next()).toBe(0.42);
-    expect(random.next()).toBe(0.42);
+  it("next() returns values in range [0, 1)", () => {
+    const random = createMathRandomSource();
+    for (let i = 0; i < 10; i++) {
+      const value = random.next();
+      expect(value).toBeGreaterThanOrEqual(0);
+      expect(value).toBeLessThan(1);
+    }
   });
 
-  it("defaults to 0 if no default provided", () => {
-    const random = createFakeRandom();
-    random.pushSequence([0.5]);
-    expect(random.next()).toBe(0.5);
-    expect(random.next()).toBe(0);
-  });
-
-  it("supports multiple pushSequence calls", () => {
-    const random = createFakeRandom();
-    random.pushSequence([0.1, 0.2]);
-    random.pushSequence([0.3, 0.4]);
-    expect(random.next()).toBe(0.1);
-    expect(random.next()).toBe(0.2);
-    expect(random.next()).toBe(0.3);
-    expect(random.next()).toBe(0.4);
-  });
-
-  it("returns default after multiple sequences", () => {
-    const random = createFakeRandom(0.99);
-    random.pushSequence([0.1]);
-    random.pushSequence([0.2]);
-    expect(random.next()).toBe(0.1);
-    expect(random.next()).toBe(0.2);
-    expect(random.next()).toBe(0.99);
+  it("generates different values across calls", () => {
+    const random = createMathRandomSource();
+    const values = new Set<number>();
+    for (let i = 0; i < 10; i++) {
+      values.add(random.next());
+    }
+    // With high probability, we should get at least 2 different values from 10 calls
+    expect(values.size).toBeGreaterThan(1);
   });
 });

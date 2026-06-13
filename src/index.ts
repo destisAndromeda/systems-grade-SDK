@@ -33,7 +33,7 @@ export { createSystemTimer } from "./core/timer.js";
 export type { RandomSource } from "./core/random.js";
 export { createMathRandomSource } from "./core/random.js";
 export type { SdkError, SdkErrorKind } from "./core/error.js";
-export { createSdkError, isRetryableSdkError, mapToSdkError } from "./core/error.js";
+export { createSdkError, isKindOfSdkError, isRetryableSdkError, mapToSdkError } from "./core/error.js";
 
 // RPC
 export type {

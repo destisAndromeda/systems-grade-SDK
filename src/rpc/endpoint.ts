@@ -13,15 +13,24 @@ import { createSdkError } from "../core/error.js";
 /**
  * Normalize endpoint config from string or object.
  * Applied before adding to registry.
+ * Does not mutate the input object.
  */
 export function normalizeRpcEndpointConfig(
   input: string | RpcEndpointConfig,
 ): Result<RpcEndpointConfig, SdkError> {
-  const config: RpcEndpointConfig = typeof input === "string" ? { url: input } : input;
+  // Create a new config object to avoid mutation
+  const inputConfig = typeof input === "string" ? { url: input } : input;
+  const config: RpcEndpointConfig = {
+    url: inputConfig.url,
+    weight: inputConfig.weight ?? 1,
+  };
 
-  // Fill defaults
-  if (!config.weight) {
-    config.weight = 1;
+  if (inputConfig.timeoutMs !== undefined) {
+    config.timeoutMs = inputConfig.timeoutMs;
+  }
+
+  if (inputConfig.headers !== undefined) {
+    config.headers = inputConfig.headers;
   }
 
   // Validate URL
@@ -30,7 +39,9 @@ export function normalizeRpcEndpointConfig(
   }
 
   try {
-    new URL(config.url);
+    const urlObj = new URL(config.url);
+    // Normalize: remove trailing slash
+    config.url = urlObj.href.replace(/\/$/, "");
   } catch {
     return err(createSdkError("InvalidConfig", `Invalid URL: ${config.url}`));
   }
@@ -88,6 +99,35 @@ export function recordEndpointSuccess(
     consecutiveFailures: 0,
     avgLatencyMs,
     lastSuccessAt: nowMs,
+  };
+}
+
+/**
+ * Record an attempt failure (increments consecutive failures for circuit breaker).
+ * Does NOT increment overall failureCount (only recordRequestFailure does that).
+ */
+export function recordAttemptFailure(
+  state: RpcEndpointState,
+  nowMs: number,
+): RpcEndpointState {
+  return {
+    ...state,
+    consecutiveFailures: state.consecutiveFailures + 1,
+    lastFailureAt: nowMs,
+  };
+}
+
+/**
+ * Record a request-level failure (increments overall failure count).
+ */
+export function recordRequestFailure(
+  state: RpcEndpointState,
+  nowMs: number,
+): RpcEndpointState {
+  return {
+    ...state,
+    failureCount: state.failureCount + 1,
+    lastFailureAt: nowMs,
   };
 }
 

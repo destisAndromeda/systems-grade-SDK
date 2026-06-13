@@ -59,21 +59,30 @@ export function isCircuitOpen(
 /**
  * Maybe close a circuit if it has expired.
  *
+ * Only resets the circuit and consecutive failures if:
+ * - Circuit was previously opened (circuitOpenUntil is defined)
+ * - AND the circuit duration has expired (circuitOpenUntil <= nowMs)
+ *
  * @param state Endpoint state
  * @param nowMs Current time
- * @returns Updated state with circuit closed if expired
+ * @returns Updated state with circuit closed if expired, otherwise unchanged
  */
 export function maybeCloseCircuit(
   state: RpcEndpointState,
   nowMs: number,
 ): RpcEndpointState {
-  if (!isCircuitOpen(state, nowMs)) {
-    // Circuit not open or has expired
+  // Only reset if circuit was previously opened AND it has now expired
+  if (
+    state.circuitOpenUntil !== undefined &&
+    state.circuitOpenUntil <= nowMs
+  ) {
+    // Circuit was open but has now expired - reset it
     const { circuitOpenUntil: _, ...rest } = state;
     return {
       ...rest,
       consecutiveFailures: 0,
     };
   }
+  // Circuit never opened, still open, or not ready to close yet - return unchanged
   return state;
 }

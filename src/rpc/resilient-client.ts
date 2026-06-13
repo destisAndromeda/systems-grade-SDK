@@ -20,6 +20,12 @@ import type { Timer } from "../core/timer.js";
 import type { RandomSource } from "../core/random.js";
 import type { Result } from "../core/result.js";
 import { ok, err } from "../core/result.js";
+import { createSdkError, isRetryableSdkError } from "../core/error.js";
+import { selectBestEndpoint } from "./scoring.js";
+import { recordEndpointSuccess, recordAttemptFailure, recordRequestFailure } from "./endpoint.js";
+import { shouldOpenCircuit, openCircuit, maybeCloseCircuit } from "./circuit-breaker.js";
+import { shouldRetry, computeBackoffMs } from "./retry.js";
+import { createRpcRequestContext, executeRpcAttempt } from "./transport.js";
 
 /**
  * Dependencies for resilient RPC client.
@@ -44,8 +50,24 @@ export function createResilientRpcClient(
   config: ResilientRpcConfig,
   deps: ResilientRpcClientDeps,
 ): RpcTransport {
-  // TODO: return a single RpcTransport that implements the resilience flow
-  throw new Error("TODO");
+  return {
+    endpointUrl: "resilient://rpc",
+    endpointId: "resilient-rpc",
+
+    async send<TParams, TResult>(
+      method: string,
+      params: TParams,
+      options?: { timeoutMs?: number },
+    ): Promise<TResult> {
+      const result = await executeResilientRpcRequest(method, params, transports, config, deps);
+
+      if (result.ok) {
+        return result.value.value;
+      } else {
+        throw result.error;
+      }
+    },
+  };
 }
 
 /**
@@ -65,11 +87,141 @@ export async function executeResilientRpcRequest<TParams, TResult>(
   config: ResilientRpcConfig,
   deps: ResilientRpcClientDeps,
 ): Promise<Result<ResilientRpcResult<TResult>>> {
-  // TODO: implement the resilience flow:
-  // 1. select endpoint
-  // 2. execute attempt
-  // 3. record outcome to registry
-  // 4. check if should retry or select new endpoint
-  // 5. repeat until success or all attempts/endpoints exhausted
-  throw new Error("TODO");
+  let attempts = 0;
+  let totalLatencyMs = 0;
+  let lastError: Error | undefined;
+  let lastAttemptedEndpointId: string | undefined;
+  let hitMaxRetries = false;
+
+  const startedAtMs = deps.clock.now();
+  const initialEndpointCount = deps.registry.getAll().length;
+
+  // Keep trying until max attempts
+  while (attempts < config.retry.maxAttempts) {
+    attempts++;
+
+    // Run maybeCloseCircuit on all endpoints
+    const allStates = deps.registry.getAll();
+    const nowMs = deps.clock.now();
+    for (const state of allStates) {
+      const closedState = maybeCloseCircuit(state, nowMs);
+      deps.registry.upsert(closedState);
+    }
+
+    // Select best endpoint
+    const selectResult = selectBestEndpoint(
+      deps.registry.getAll(),
+      config.scoring,
+      nowMs,
+    );
+
+    if (!selectResult.ok) {
+      return err(selectResult.error);
+    }
+
+    const selectedState = selectResult.value;
+    
+    // If we switched to a different endpoint, record request failure on previous one
+    if (lastAttemptedEndpointId && lastAttemptedEndpointId !== selectedState.id) {
+      const prevState = deps.registry.getById(lastAttemptedEndpointId);
+      if (prevState) {
+        const prevFailedState = recordRequestFailure(prevState, nowMs);
+        deps.registry.upsert(prevFailedState);
+      }
+    }
+    lastAttemptedEndpointId = selectedState.id;
+
+    const transport = transports.get(selectedState.id);
+
+    // If transport not found, treat as endpoint failure
+    if (!transport) {
+      const failedState = recordAttemptFailure(selectedState, nowMs);
+      deps.registry.upsert(failedState);
+      lastError = new Error(`No transport for endpoint: ${selectedState.id}`);
+      continue;
+    }
+
+    // Determine timeout for this request
+    const timeoutMs = selectedState.config.timeoutMs ?? config.defaultTimeoutMs;
+
+    // Create request context
+    const context = createRpcRequestContext(method, params, startedAtMs, timeoutMs);
+
+    // Execute the RPC attempt
+    const attemptResult = await executeRpcAttempt(transport, context, deps.clock, deps.timer);
+
+    // Track latency
+    totalLatencyMs += attemptResult.latencyMs;
+
+    // Handle success
+    if (attemptResult.kind === "success") {
+      const successState = recordEndpointSuccess(selectedState, attemptResult.latencyMs, nowMs);
+      deps.registry.upsert(successState);
+
+      return ok({
+        value: attemptResult.value,
+        endpointId: attemptResult.endpointId,
+        attempts,
+        latencyMs: totalLatencyMs,
+      });
+    }
+
+    // Handle attempt failure - record for circuit breaker tracking
+    let failureState = recordAttemptFailure(selectedState, nowMs);
+
+    // Check if circuit should open
+    if (shouldOpenCircuit(failureState, config.circuitBreaker)) {
+      const openedState = openCircuit(failureState, nowMs, config.circuitBreaker.openDurationMs);
+      deps.registry.upsert(openedState);
+    } else {
+      deps.registry.upsert(failureState);
+    }
+
+    lastError = attemptResult.error;
+
+    // Check if should retry
+    if (!shouldRetry(attemptResult, attempts, config.retry)) {
+      // If error is non-retryable, record as request failure and return immediately
+      if (!isRetryableSdkError(attemptResult.error)) {
+        failureState = recordRequestFailure(failureState, nowMs);
+        deps.registry.upsert(failureState);
+        return err(attemptResult.error);
+      }
+      // If retryable but maxAttempts reached, mark that we hit max retries
+      failureState = recordRequestFailure(failureState, nowMs);
+      deps.registry.upsert(failureState);
+      hitMaxRetries = true;
+      break;
+    }
+
+    // Compute backoff and wait if needed
+    const backoffMs = computeBackoffMs(attempts, config.retry, deps.random);
+    if (backoffMs > 0) {
+      await new Promise<void>((resolve) => {
+        deps.timer.setTimeout(resolve, backoffMs);
+      });
+    }
+  }
+
+  // All attempts exhausted
+  if (hitMaxRetries) {
+    // If we have multiple endpoints, return AllEndpointsFailed
+    // Otherwise, return the specific error for the single endpoint
+    if (initialEndpointCount > 1) {
+      return err(
+        createSdkError("AllEndpointsFailed", "All RPC endpoints failed", {
+          cause: lastError,
+        }),
+      );
+    }
+    // Single endpoint - return its specific error
+    if (lastError) {
+      return err(lastError);
+    }
+  }
+
+  // No error occurred (shouldn't reach here)
+  return err(
+    createSdkError("Unknown", "RPC request failed with no error details"),
+  );
 }

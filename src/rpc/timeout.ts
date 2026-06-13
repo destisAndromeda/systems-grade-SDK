@@ -67,35 +67,29 @@ export async function withTimeout<T>(
 
   const startedAtMs = clock.now();
 
-  return new Promise((resolve, reject) => {
-    let resolved = false;
+  return new Promise<T>((resolve, reject) => {
+    let settled = false;
 
-    // Race: either the promise resolves first, or timeout fires
+    const timeoutHandle = timer.setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      const elapsedMs = clock.now() - startedAtMs;
+      reject(createTimeoutError(method, elapsedMs, timeoutMs));
+    }, timeoutMs);
+
     promise.then(
       (value) => {
-        resolved = true;
+        if (settled) return;
+        settled = true;
+        timer.clearTimeout(timeoutHandle);
         resolve(value);
       },
       (error) => {
-        resolved = true;
+        if (settled) return;
+        settled = true;
+        timer.clearTimeout(timeoutHandle);
         reject(error);
       },
     );
-
-    // Schedule timeout
-    const timeoutHandle = timer.setTimeout(() => {
-      if (!resolved) {
-        resolved = true;
-        const elapsedMs = clock.now() - startedAtMs;
-        reject(createTimeoutError(method, elapsedMs, timeoutMs));
-      }
-    }, timeoutMs);
-
-    // Clean up if promise resolves before timeout
-    promise.finally(() => {
-      if (resolved) {
-        timer.clearTimeout(timeoutHandle);
-      }
-    });
   });
 }

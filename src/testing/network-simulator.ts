@@ -9,6 +9,7 @@ import type { RpcTransport } from "../rpc/types.js";
 import type { Clock } from "../core/clock.js";
 import type { Timer } from "../core/timer.js";
 import type { RandomSource } from "../core/random.js";
+import { createSdkError } from "../core/error.js";
 
 /**
  * Network simulation configuration.
@@ -38,6 +39,47 @@ export function simulateNetworkBehavior(
   config: NetworkSimConfig,
   deps: { clock: Clock; timer: Timer; random: RandomSource },
 ): RpcTransport {
-  // TODO: wrap transport to inject latency, drops, and failures
-  throw new Error("TODO");
+  return {
+    endpointUrl: transport.endpointUrl,
+    endpointId: transport.endpointId,
+
+    async send<TParams, TResult>(
+      method: string,
+      params: TParams,
+      options?: { timeoutMs?: number },
+    ): Promise<TResult> {
+      // Apply latency if configured
+      if (config.latencyMs !== undefined && config.latencyMs > 0) {
+        await new Promise<void>((resolve) => {
+          deps.timer.setTimeout(resolve, config.latencyMs!);
+        });
+      }
+
+      // Simulate drop as timeout
+      if (config.dropRate !== undefined && config.dropRate > 0) {
+        const randomValue = deps.random.next();
+        if (randomValue < config.dropRate) {
+          throw createSdkError("Timeout", "Simulated dropped RPC request", { retryable: true });
+        }
+      }
+
+      // Simulate failure
+      if (config.failRate !== undefined && config.failRate > 0) {
+        const randomValue = deps.random.next();
+        if (randomValue < config.failRate) {
+          if (config.failureError !== undefined) {
+            throw config.failureError;
+          } else {
+            throw createSdkError("NetworkError", "Simulated network failure");
+          }
+        }
+      }
+
+      // Determine timeout for wrapped call
+      const timeoutMs = options?.timeoutMs ?? config.timeoutMs;
+
+      // Delegate to wrapped transport
+      return transport.send<TParams, TResult>(method, params, timeoutMs !== undefined ? { timeoutMs } : undefined);
+    },
+  };
 }

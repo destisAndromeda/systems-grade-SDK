@@ -2,92 +2,73 @@
  * Tests for timer implementations.
  */
 
-import { describe, it, expect } from "vitest";
-import { createFakeTimer } from "../../src/testing/fake-timer.js";
-import { createFakeClock } from "../../src/testing/fake-clock.js";
+import { describe, it, expect, vi, afterEach } from "vitest";
+import { createSystemTimer } from "../../src/core/timer.js";
 
-describe("createFakeTimer", () => {
-  it("starts with no pending callbacks", () => {
-    const timer = createFakeTimer();
-    expect(timer.pendingCount()).toBe(0);
+describe("createSystemTimer", () => {
+  afterEach(() => {
+    vi.clearAllTimers();
   });
 
-  it("schedules callback via setTimeout", () => {
-    const timer = createFakeTimer();
-    timer.setTimeout(() => {}, 100);
-    expect(timer.pendingCount()).toBe(1);
+  it("exposes setTimeout method", () => {
+    const timer = createSystemTimer();
+    expect(typeof timer.setTimeout).toBe("function");
   });
 
-  it("clears scheduled callback via clearTimeout", () => {
-    const timer = createFakeTimer();
+  it("exposes clearTimeout method", () => {
+    const timer = createSystemTimer();
+    expect(typeof timer.clearTimeout).toBe("function");
+  });
+
+  it("setTimeout returns a handle", () => {
+    const timer = createSystemTimer();
     const handle = timer.setTimeout(() => {}, 100);
-    expect(timer.pendingCount()).toBe(1);
+    expect(handle).toBeDefined();
     timer.clearTimeout(handle);
-    expect(timer.pendingCount()).toBe(0);
   });
 
-  it("flushAll() executes all pending callbacks", () => {
-    const timer = createFakeTimer();
-    let count = 0;
-    timer.setTimeout(() => {
-      count++;
-    }, 100);
-    timer.setTimeout(() => {
-      count++;
-    }, 50);
-    expect(timer.pendingCount()).toBe(2);
-    timer.flushAll();
-    expect(count).toBe(2);
-    expect(timer.pendingCount()).toBe(0);
+  it("schedules callback with setTimeout", async () => {
+    vi.useFakeTimers();
+    const timer = createSystemTimer();
+    const callback = vi.fn();
+
+    timer.setTimeout(callback, 100);
+
+    await vi.advanceTimersByTimeAsync(100);
+
+    expect(callback).toHaveBeenCalledOnce();
+    vi.useRealTimers();
   });
 
-  it("advanceAndFlush() executes callbacks within delay", () => {
-    const timer = createFakeTimer();
-    const clock = createFakeClock(0);
-    let count = 0;
+  it("clearTimeout prevents callback execution", async () => {
+    vi.useFakeTimers();
+    const timer = createSystemTimer();
+    const callback = vi.fn();
 
-    timer.setTimeout(() => {
-      count++;
-    }, 100);
+    const handle = timer.setTimeout(callback, 100);
+    timer.clearTimeout(handle);
 
-    timer.advanceAndFlush(50, clock);
-    expect(count).toBe(0);
+    await vi.advanceTimersByTimeAsync(100);
 
-    timer.advanceAndFlush(50, clock);
-    expect(count).toBe(1);
+    expect(callback).not.toHaveBeenCalled();
+    vi.useRealTimers();
   });
 
-  it("callbacks execute in order of scheduling", () => {
-    const timer = createFakeTimer();
-    const order: number[] = [];
+  it("supports multiple timeouts", async () => {
+    vi.useFakeTimers();
+    const timer = createSystemTimer();
+    const callback1 = vi.fn();
+    const callback2 = vi.fn();
 
-    timer.setTimeout(() => {
-      order.push(1);
-    }, 100);
-    timer.setTimeout(() => {
-      order.push(2);
-    }, 50);
-    timer.setTimeout(() => {
-      order.push(3);
-    }, 150);
+    timer.setTimeout(callback1, 50);
+    timer.setTimeout(callback2, 100);
 
-    timer.flushAll();
-    expect(order).toEqual([1, 2, 3]);
-  });
+    await vi.advanceTimersByTimeAsync(50);
+    expect(callback1).toHaveBeenCalledOnce();
+    expect(callback2).not.toHaveBeenCalled();
 
-  it("handles multiple schedules and clears", () => {
-    const timer = createFakeTimer();
-    let count = 0;
-
-    const h1 = timer.setTimeout(() => {
-      count++;
-    }, 100);
-    const h2 = timer.setTimeout(() => {
-      count++;
-    }, 50);
-
-    timer.clearTimeout(h1);
-    timer.flushAll();
-    expect(count).toBe(1);
+    await vi.advanceTimersByTimeAsync(50);
+    expect(callback2).toHaveBeenCalledOnce();
+    vi.useRealTimers();
   });
 });
