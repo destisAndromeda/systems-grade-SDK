@@ -20,8 +20,7 @@ export function shouldOpenCircuit(
   state: RpcEndpointState,
   config: CircuitBreakerConfig,
 ): boolean {
-  // TODO: return true if consecutiveFailures >= failureThreshold
-  throw new Error("TODO");
+  return state.consecutiveFailures >= config.failureThreshold;
 }
 
 /**
@@ -37,8 +36,10 @@ export function openCircuit(
   nowMs: number,
   openDurationMs: number,
 ): RpcEndpointState {
-  // TODO: set circuitOpenUntil = nowMs + openDurationMs
-  throw new Error("TODO");
+  return {
+    ...state,
+    circuitOpenUntil: nowMs + openDurationMs,
+  };
 }
 
 /**
@@ -52,8 +53,7 @@ export function isCircuitOpen(
   state: RpcEndpointState,
   nowMs: number,
 ): boolean {
-  // TODO: return true if circuitOpenUntil is set and > nowMs
-  throw new Error("TODO");
+  return state.circuitOpenUntil !== undefined && state.circuitOpenUntil > nowMs;
 }
 
 /**
@@ -67,7 +67,13 @@ export function maybeCloseCircuit(
   state: RpcEndpointState,
   nowMs: number,
 ): RpcEndpointState {
-  // TODO: if circuit is open but circuitOpenUntil <= nowMs,
-  // clear circuitOpenUntil and reset consecutiveFailures to 0
-  throw new Error("TODO");
+  if (!isCircuitOpen(state, nowMs)) {
+    // Circuit not open or has expired
+    return {
+      ...state,
+      circuitOpenUntil: undefined,
+      consecutiveFailures: 0,
+    };
+  }
+  return state;
 }

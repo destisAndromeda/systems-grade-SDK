@@ -2,37 +2,116 @@
  * Tests for RPC endpoint utilities.
  */
 
-import { describe, it } from "vitest";
-import { normalizeRpcEndpointConfig, createEndpointId } from "../../src/rpc/endpoint.js";
+import { describe, it, expect } from "vitest";
+import { normalizeRpcEndpointConfig, createEndpointId, createInitialEndpointState, recordEndpointSuccess, recordEndpointFailure } from "../../src/rpc/endpoint.js";
+import { createSdkError } from "../../src/core/error.js";
+import { isOk, isErr } from "../../src/core/result.js";
 
 describe("normalizeRpcEndpointConfig", () => {
   it("converts URL string to default config", () => {
-    // TODO: assert normalizeRpcEndpointConfig("https://api.com") returns ok with weight=1
+    const result = normalizeRpcEndpointConfig("https://api.solana.com");
+    expect(isOk(result)).toBe(true);
+    if (isOk(result)) {
+      expect(result.value.url).toBe("https://api.solana.com");
+      expect(result.value.weight).toBe(1);
+    }
   });
 
   it("returns error for empty URL string", () => {
-    // TODO: assert normalizeRpcEndpointConfig("") returns err(InvalidConfig)
+    const result = normalizeRpcEndpointConfig("");
+    expect(isErr(result)).toBe(true);
+    if (isErr(result)) {
+      expect(result.error.kind).toBe("InvalidConfig");
+    }
+  });
+
+  it("returns error for invalid URL", () => {
+    const result = normalizeRpcEndpointConfig("not a url");
+    expect(isErr(result)).toBe(true);
+    if (isErr(result)) {
+      expect(result.error.kind).toBe("InvalidConfig");
+    }
   });
 
   it("preserves fields from object config", () => {
-    // TODO: pass { url: "...", weight: 2 }, assert result includes both
+    const result = normalizeRpcEndpointConfig({ url: "https://api.solana.com", weight: 2 });
+    expect(isOk(result)).toBe(true);
+    if (isOk(result)) {
+      expect(result.value.url).toBe("https://api.solana.com");
+      expect(result.value.weight).toBe(2);
+    }
   });
 
   it("fills in default values", () => {
-    // TODO: assert normalized config has weight and other defaults
+    const result = normalizeRpcEndpointConfig({ url: "https://api.solana.com" });
+    expect(isOk(result)).toBe(true);
+    if (isOk(result)) {
+      expect(result.value.weight).toBe(1);
+    }
   });
 });
 
 describe("createEndpointId", () => {
   it("creates stable ID for same URL", () => {
-    // TODO: create ID twice for same URL, assert they match
+    const config = { url: "https://api.solana.com" };
+    const id1 = createEndpointId(config);
+    const id2 = createEndpointId(config);
+    expect(id1).toBe(id2);
   });
 
   it("normalizes trailing slashes", () => {
-    // TODO: create IDs for "https://api.com" and "https://api.com/", assert they match
+    const id1 = createEndpointId({ url: "https://api.solana.com" });
+    const id2 = createEndpointId({ url: "https://api.solana.com/" });
+    expect(id1).toBe(id2);
   });
 
   it("creates different IDs for different URLs", () => {
-    // TODO: assert ID for "https://api1.com" !== ID for "https://api2.com"
+    const id1 = createEndpointId({ url: "https://api1.solana.com" });
+    const id2 = createEndpointId({ url: "https://api2.solana.com" });
+    expect(id1).not.toBe(id2);
+  });
+
+  it("case-normalizes URLs", () => {
+    const id1 = createEndpointId({ url: "https://API.solana.com" });
+    const id2 = createEndpointId({ url: "https://api.solana.com" });
+    expect(id1).toBe(id2);
+  });
+});
+
+describe("recordEndpointSuccess", () => {
+  it("increments success count", () => {
+    const state = createInitialEndpointState({ url: "https://api.solana.com" });
+    const updated = recordEndpointSuccess(state, 100, 1000);
+    expect(updated.successCount).toBe(1);
+  });
+
+  it("updates latency average", () => {
+    const state = createInitialEndpointState({ url: "https://api.solana.com" });
+    const updated = recordEndpointSuccess(state, 100, 1000);
+    expect(updated.avgLatencyMs).toBe(100);
+  });
+
+  it("resets consecutive failures", () => {
+    const state = createInitialEndpointState({ url: "https://api.solana.com" });
+    let updated = recordEndpointFailure(state, createSdkError("NetworkError", "fail"), 1000);
+    expect(updated.consecutiveFailures).toBe(1);
+    updated = recordEndpointSuccess(updated, 100, 1100);
+    expect(updated.consecutiveFailures).toBe(0);
+  });
+});
+
+describe("recordEndpointFailure", () => {
+  it("increments failure count", () => {
+    const state = createInitialEndpointState({ url: "https://api.solana.com" });
+    const updated = recordEndpointFailure(state, createSdkError("NetworkError", "fail"), 1000);
+    expect(updated.failureCount).toBe(1);
+    expect(updated.consecutiveFailures).toBe(1);
+  });
+
+  it("increments consecutive failures", () => {
+    let state = createInitialEndpointState({ url: "https://api.solana.com" });
+    state = recordEndpointFailure(state, createSdkError("NetworkError", "fail"), 1000);
+    state = recordEndpointFailure(state, createSdkError("NetworkError", "fail"), 1100);
+    expect(state.consecutiveFailures).toBe(2);
   });
 });

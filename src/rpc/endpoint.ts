@@ -17,8 +17,25 @@ import { createSdkError } from "../core/error.js";
 export function normalizeRpcEndpointConfig(
   input: string | RpcEndpointConfig,
 ): Result<RpcEndpointConfig> {
-  // TODO: convert string to {url, weight:1}, fill defaults, validate URL, return ok/err
-  throw new Error("TODO");
+  const config: RpcEndpointConfig = typeof input === "string" ? { url: input } : input;
+
+  // Fill defaults
+  if (!config.weight) {
+    config.weight = 1;
+  }
+
+  // Validate URL
+  if (!config.url || config.url.trim() === "") {
+    return err(createSdkError("InvalidConfig", "Endpoint URL cannot be empty"));
+  }
+
+  try {
+    new URL(config.url);
+  } catch {
+    return err(createSdkError("InvalidConfig", `Invalid URL: ${config.url}`));
+  }
+
+  return ok(config);
 }
 
 /**
@@ -26,8 +43,13 @@ export function normalizeRpcEndpointConfig(
  * Same URL should produce same ID (normalized, trailing slash removed).
  */
 export function createEndpointId(config: RpcEndpointConfig): string {
-  // TODO: hash or slug the URL to create stable ID
-  throw new Error("TODO");
+  // Normalize: remove trailing slash and lowercase
+  const normalized = config.url.replace(/\/$/, "").toLowerCase();
+  // Simple slug: replace special chars with underscore
+  return normalized
+    .replace(/[^a-z0-9]/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_|_$/g, "");
 }
 
 /**
@@ -35,8 +57,14 @@ export function createEndpointId(config: RpcEndpointConfig): string {
  * Called when a new endpoint is added to the registry.
  */
 export function createInitialEndpointState(config: RpcEndpointConfig): RpcEndpointState {
-  // TODO: initialize counters to zero, set config and id
-  throw new Error("TODO");
+  return {
+    config,
+    id: createEndpointId(config),
+    successCount: 0,
+    failureCount: 0,
+    consecutiveFailures: 0,
+    avgLatencyMs: 0,
+  };
 }
 
 /**
@@ -48,9 +76,19 @@ export function recordEndpointSuccess(
   latencyMs: number,
   nowMs: number,
 ): RpcEndpointState {
-  // TODO: increment successCount, update avgLatencyMs via exponential moving average,
-  // reset consecutiveFailures, set lastSuccessAt
-  throw new Error("TODO");
+  const successCount = state.successCount + 1;
+  // Exponential moving average: new_avg = (old_avg * old_count + new_latency) / new_count
+  const avgLatencyMs =
+    (state.avgLatencyMs * state.successCount + latencyMs) / successCount;
+
+  return {
+    ...state,
+    successCount,
+    failureCount: state.failureCount,
+    consecutiveFailures: 0,
+    avgLatencyMs,
+    lastSuccessAt: nowMs,
+  };
 }
 
 /**
@@ -62,8 +100,12 @@ export function recordEndpointFailure(
   error: SdkError,
   nowMs: number,
 ): RpcEndpointState {
-  // TODO: increment failureCount and consecutiveFailures, set lastFailureAt
-  throw new Error("TODO");
+  return {
+    ...state,
+    failureCount: state.failureCount + 1,
+    consecutiveFailures: state.consecutiveFailures + 1,
+    lastFailureAt: nowMs,
+  };
 }
 
 /**
@@ -74,8 +116,11 @@ export function applyEndpointAttemptOutcome(
   outcome: EndpointAttemptOutcome,
   nowMs: number,
 ): RpcEndpointState {
-  // TODO: dispatch to recordEndpointSuccess or recordEndpointFailure based on outcome.success
-  throw new Error("TODO");
+  if (outcome.success) {
+    return recordEndpointSuccess(state, outcome.latencyMs, nowMs);
+  } else {
+    return recordEndpointFailure(state, outcome.error!, nowMs);
+  }
 }
 
 /**
@@ -85,6 +130,7 @@ export function isEndpointHealthy(
   state: RpcEndpointState,
   nowMs: number,
 ): boolean {
-  // TODO: return true if circuit is not open and endpoint has reasonable health
-  throw new Error("TODO");
+  // Endpoint is healthy if circuit is not open
+  // Note: circuit status is checked in scoring/selection logic
+  return !state.circuitOpenUntil || state.circuitOpenUntil <= nowMs;
 }

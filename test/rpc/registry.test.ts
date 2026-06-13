@@ -2,28 +2,62 @@
  * Tests for endpoint registry.
  */
 
-import { describe, it } from "vitest";
+import { describe, it, expect } from "vitest";
 import { createEndpointRegistry } from "../../src/rpc/registry.js";
+import { isOk, isErr } from "../../src/core/result.js";
 
 describe("createEndpointRegistry", () => {
   it("creates registry from array of endpoint URLs", () => {
-    // TODO: createEndpointRegistry(["https://api1.com", "https://api2.com"])
-    // assert registry.getAll() returns 2 endpoints
+    const result = createEndpointRegistry(["https://api1.solana.com", "https://api2.solana.com"]);
+    expect(isOk(result)).toBe(true);
+    if (isOk(result)) {
+      const registry = result.value;
+      expect(registry.getAll().length).toBe(2);
+    }
   });
 
   it("deduplicates equivalent endpoints by URL", () => {
-    // TODO: pass ["https://api.com", "https://api.com/"], assert result has 1 endpoint
+    const result = createEndpointRegistry([
+      "https://api.solana.com",
+      "https://api.solana.com/",
+    ]);
+    expect(isOk(result)).toBe(true);
+    if (isOk(result)) {
+      expect(result.value.getAll().length).toBe(1);
+    }
   });
 
   it("returns error for empty config array", () => {
-    // TODO: assert createEndpointRegistry([]) returns err(InvalidConfig)
+    const result = createEndpointRegistry([]);
+    expect(isErr(result)).toBe(true);
+    if (isErr(result)) {
+      expect(result.error.kind).toBe("InvalidConfig");
+    }
   });
 
   it("initializes endpoint state with zero counters", () => {
-    // TODO: create registry, getState, assert successCount/failureCount === 0
+    const result = createEndpointRegistry(["https://api.solana.com"]);
+    expect(isOk(result)).toBe(true);
+    if (isOk(result)) {
+      const registry = result.value;
+      const endpoints = registry.getAll();
+      expect(endpoints[0].successCount).toBe(0);
+      expect(endpoints[0].failureCount).toBe(0);
+      expect(endpoints[0].consecutiveFailures).toBe(0);
+      expect(endpoints[0].avgLatencyMs).toBe(0);
+    }
   });
 
   it("upsert() updates endpoint state", () => {
-    // TODO: getById, mutate state, upsert, assert state updated in registry
+    const result = createEndpointRegistry(["https://api.solana.com"]);
+    expect(isOk(result)).toBe(true);
+    if (isOk(result)) {
+      const registry = result.value;
+      const state = registry.getAll()[0];
+      const updated = { ...state, successCount: 5 };
+      registry.upsert(updated);
+      const retrieved = registry.getById(state.id);
+      expect(retrieved?.successCount).toBe(5);
+    }
   });
 });

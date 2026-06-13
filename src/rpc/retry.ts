@@ -24,10 +24,18 @@ export function shouldRetry(
   attemptNumber: number, // 1-based
   config: RetryConfig,
 ): boolean {
-  // TODO: check result kind, return false if success,
-  // false if attemptNumber >= maxAttempts,
-  // else check isRetryableSdkError(result.error)
-  throw new Error("TODO");
+  // If success, don't retry
+  if (result.kind === "success") {
+    return false;
+  }
+
+  // If max attempts reached, don't retry
+  if (attemptNumber >= config.maxAttempts) {
+    return false;
+  }
+
+  // Otherwise, check if error is retryable
+  return isRetryableSdkError(result.error);
 }
 
 /**
@@ -46,6 +54,17 @@ export function computeBackoffMs(
   config: RetryConfig,
   random: RandomSource,
 ): number {
-  // TODO: compute exponential backoff with jitter, cap at maxDelayMs
-  throw new Error("TODO");
+  // Exponential backoff: baseDelay * 2^(attempt-1)
+  const exponentialDelay = config.baseDelayMs * Math.pow(2, attemptNumber - 1);
+
+  // Cap at maxDelayMs
+  const cappedDelay = Math.min(exponentialDelay, config.maxDelayMs);
+
+  // Add jitter: multiply by (1 ± jitterRatio * randomValue)
+  const randomValue = random.next(); // [0, 1)
+  const jitterMultiplier = 1 + (randomValue - 0.5) * 2 * config.jitterRatio;
+  const delayWithJitter = cappedDelay * jitterMultiplier;
+
+  // Ensure non-negative
+  return Math.max(0, delayWithJitter);
 }

@@ -26,9 +26,25 @@ export function scoreEndpoint(
   config: EndpointScoreConfig,
   nowMs: number,
 ): number {
-  // TODO: calculate score combining latency, failure rate, and recency penalties
-  // lower is better; zero-attempt endpoint should get neutral/high score
-  throw new Error("TODO");
+  let score = 0;
+
+  // Latency score (weighted by config)
+  score += state.avgLatencyMs * config.latencyWeight;
+
+  // Failure rate score (weighted by config)
+  const totalAttempts = state.successCount + state.failureCount;
+  const failureRate = totalAttempts > 0 ? state.failureCount / totalAttempts : 0;
+  score += failureRate * 1000 * config.failureWeight; // Scale to reasonable range
+
+  // Recent failure penalty (if last failure was recent)
+  if (state.lastFailureAt !== undefined) {
+    const timeSinceFailureMs = nowMs - state.lastFailureAt;
+    // Penalty decays over time (exponential decay)
+    const recencyFactor = Math.exp(-timeSinceFailureMs / 10000); // 10s half-life
+    score += recencyFactor * config.recentFailurePenalty;
+  }
+
+  return score;
 }
 
 /**
@@ -38,8 +54,7 @@ export function isEndpointCircuitOpen(
   state: RpcEndpointState,
   nowMs: number,
 ): boolean {
-  // TODO: return true if circuitOpenUntil is set and > nowMs
-  throw new Error("TODO");
+  return state.circuitOpenUntil !== undefined && state.circuitOpenUntil > nowMs;
 }
 
 /**
@@ -57,7 +72,24 @@ export function selectBestEndpoint(
   config: EndpointScoreConfig,
   nowMs: number,
 ): Result<RpcEndpointState> {
-  // TODO: filter out circuit-open endpoints, score remaining ones,
-  // return one with lowest score or err(AllEndpointsFailed)
-  throw new Error("TODO");
+  // Filter out circuit-open endpoints
+  const available = states.filter((state) => !isEndpointCircuitOpen(state, nowMs));
+
+  if (available.length === 0) {
+    return err(createSdkError("AllEndpointsFailed", "All RPC endpoints are circuit-open"));
+  }
+
+  // Score each available endpoint and select the best (lowest score)
+  let bestEndpoint = available[0];
+  let bestScore = scoreEndpoint(bestEndpoint, config, nowMs);
+
+  for (let i = 1; i < available.length; i++) {
+    const score = scoreEndpoint(available[i], config, nowMs);
+    if (score < bestScore) {
+      bestScore = score;
+      bestEndpoint = available[i];
+    }
+  }
+
+  return ok(bestEndpoint);
 }

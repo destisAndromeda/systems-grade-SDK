@@ -23,8 +23,10 @@ export function isWithinTimeout(
   nowMs: number,
   timeoutMs?: number,
 ): boolean {
-  // TODO: if timeoutMs undefined return true, else check elapsed < timeoutMs
-  throw new Error("TODO");
+  if (timeoutMs === undefined) {
+    return true;
+  }
+  return nowMs - startedAtMs <= timeoutMs;
 }
 
 /**
@@ -59,7 +61,41 @@ export async function withTimeout<T>(
   clock: Clock,
   method: string,
 ): Promise<T> {
-  // TODO: if no timeout, return promise as-is;
-  // else race with a timeout timer that rejects with createTimeoutError
-  throw new Error("TODO");
+  if (timeoutMs === undefined) {
+    return promise;
+  }
+
+  const startedAtMs = clock.now();
+
+  return new Promise((resolve, reject) => {
+    let resolved = false;
+
+    // Race: either the promise resolves first, or timeout fires
+    promise.then(
+      (value) => {
+        resolved = true;
+        resolve(value);
+      },
+      (error) => {
+        resolved = true;
+        reject(error);
+      },
+    );
+
+    // Schedule timeout
+    const timeoutHandle = timer.setTimeout(() => {
+      if (!resolved) {
+        resolved = true;
+        const elapsedMs = clock.now() - startedAtMs;
+        reject(createTimeoutError(method, elapsedMs, timeoutMs));
+      }
+    }, timeoutMs);
+
+    // Clean up if promise resolves before timeout
+    promise.finally(() => {
+      if (resolved) {
+        timer.clearTimeout(timeoutHandle);
+      }
+    });
+  });
 }
