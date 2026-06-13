@@ -5,10 +5,10 @@
  * into network calls without modifying the underlying code.
  */
 
-import type { RpcTransport } from "../rpc/types";
-import type { Clock } from "../core/clock";
-import type { Timer } from "../core/timer";
-import type { RandomSource } from "../core/random";
+import type { RpcTransport } from "../rpc/types.js";
+import type { Clock } from "../core/clock.js";
+import type { Timer } from "../core/timer.js";
+import type { RandomSource } from "../core/random.js";
 
 /**
  * Network simulation configuration.

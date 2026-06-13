@@ -5,10 +5,10 @@
  * and to wrap promises with timeout enforcement.
  */
 
-import type { Timer } from "../core/timer";
-import type { Clock } from "../core/clock";
-import type { SdkError } from "../core/error";
-import { createSdkError } from "../core/error";
+import type { Timer } from "../core/timer.js";
+import type { Clock } from "../core/clock.js";
+import type { SdkError } from "../core/error.js";
+import { createSdkError } from "../core/error.js";
 
 /**
  * Check if a request is still within its timeout window.

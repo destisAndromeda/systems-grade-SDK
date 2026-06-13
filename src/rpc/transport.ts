@@ -5,10 +5,10 @@
  * and map transport errors to SDK errors.
  */
 
-import type { RpcTransport, RpcRequestContext, RpcAttemptResult } from "./types";
-import type { Clock } from "../core/clock";
-import type { SdkError } from "../core/error";
-import { createSdkError } from "../core/error";
+import type { RpcTransport, RpcRequestContext, RpcAttemptResult } from "./types.js";
+import type { Clock } from "../core/clock.js";
+import type { SdkError } from "../core/error.js";
+import { createSdkError } from "../core/error.js";
 
 /**
  * Create a request context for an RPC call.

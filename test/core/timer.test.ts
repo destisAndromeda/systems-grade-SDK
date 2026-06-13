@@ -3,8 +3,8 @@
  */
 
 import { describe, it } from "vitest";
-import { createFakeTimer } from "../../src/testing/fake-timer";
-import { createFakeClock } from "../../src/testing/fake-clock";
+import { createFakeTimer } from "../../src/testing/fake-timer.js";
+import { createFakeClock } from "../../src/testing/fake-clock.js";
 
 describe("createFakeTimer", () => {
   it("schedules callback via setTimeout", () => {

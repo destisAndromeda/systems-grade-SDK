@@ -3,7 +3,7 @@
  */
 
 import { describe, it } from "vitest";
-import { isWithinTimeout, createTimeoutError } from "../../src/rpc/timeout";
+import { isWithinTimeout, createTimeoutError } from "../../src/rpc/timeout.js";
 
 describe("isWithinTimeout", () => {
   it("returns true when timeoutMs is undefined", () => {

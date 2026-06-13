@@ -3,7 +3,7 @@
  */
 
 import { describe, it } from "vitest";
-import { createFakeClock } from "../../src/testing/fake-clock";
+import { createFakeClock } from "../../src/testing/fake-clock.js";
 
 describe("createFakeClock", () => {
   it("starts with initial time", () => {

@@ -4,10 +4,10 @@
  * Functions to validate config and create the main SDK facade.
  */
 
-import type { SolanaReliabilitySdkConfig, SolanaReliabilitySdk } from "./types";
-import type { Result } from "../core/result";
-import { ok, err } from "../core/result";
-import { createSdkError } from "../core/error";
+import type { SolanaReliabilitySdkConfig, SolanaReliabilitySdk } from "./types.js";
+import type { Result } from "../core/result.js";
+import { ok, err } from "../core/result.js";
+import { createSdkError } from "../core/error.js";
 
 /**
  * Validate SDK configuration.

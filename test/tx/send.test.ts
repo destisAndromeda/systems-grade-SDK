@@ -3,7 +3,7 @@
  */
 
 import { describe, it } from "vitest";
-import { buildPreparedTransaction, isBlockhashExpired } from "../../src/tx/send";
+import { buildPreparedTransaction, isBlockhashExpired } from "../../src/tx/send.js";
 
 describe("buildPreparedTransaction", () => {
   it("creates prepared transaction with valid inputs", () => {

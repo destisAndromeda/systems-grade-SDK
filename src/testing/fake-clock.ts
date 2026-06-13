@@ -4,7 +4,7 @@
  * Allows tests to control time and advance it manually.
  */
 
-import type { Clock } from "../core/clock";
+import type { Clock } from "../core/clock.js";
 
 /**
  * Fake clock interface (extends Clock with manual control).

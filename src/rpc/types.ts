@@ -5,7 +5,7 @@
  * and resilience policies (retry, circuit breaker, timeout).
  */
 
-import type { SdkError } from "../core/error";
+import type { SdkError } from "../core/error.js";
 
 /**
  * Configuration for a single RPC endpoint.
@@ -136,3 +136,13 @@ export type ResilientRpcResult<T> = {
   attempts: number;
   latencyMs: number;
 };
+
+/**
+ * Outcome of a single endpoint attempt (for recording).
+ */
+export interface EndpointAttemptOutcome {
+  endpointId: string;
+  success: boolean;
+  latencyMs: number;
+  error?: SdkError;
+}

@@ -3,7 +3,7 @@
  */
 
 import { describe, it } from "vitest";
-import { createSdkError, isRetryableSdkError } from "../../src/core/error";
+import { createSdkError, isRetryableSdkError } from "../../src/core/error.js";
 
 describe("createSdkError", () => {
   it("creates an error with correct kind and message", () => {

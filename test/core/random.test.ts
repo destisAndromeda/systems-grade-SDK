@@ -3,7 +3,7 @@
  */
 
 import { describe, it } from "vitest";
-import { createFakeRandom } from "../../src/testing/fake-random";
+import { createFakeRandom } from "../../src/testing/fake-random.js";
 
 describe("createFakeRandom", () => {
   it("returns scripted sequence of values", () => {

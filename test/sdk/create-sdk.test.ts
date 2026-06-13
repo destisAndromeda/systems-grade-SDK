@@ -3,7 +3,7 @@
  */
 
 import { describe, it } from "vitest";
-import { validateSdkConfig, createSolanaReliabilitySdk } from "../../src/sdk/create-sdk";
+import { validateSdkConfig, createSolanaReliabilitySdk } from "../../src/sdk/create-sdk.js";
 
 describe("validateSdkConfig", () => {
   it("accepts valid config with endpoints", () => {

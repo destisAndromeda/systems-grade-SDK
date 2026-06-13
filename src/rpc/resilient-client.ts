@@ -13,13 +13,13 @@
  *  6. Return final result
  */
 
-import type { RpcTransport, ResilientRpcConfig, ResilientRpcResult } from "./types";
-import type { EndpointRegistry } from "./types";
-import type { Clock } from "../core/clock";
-import type { Timer } from "../core/timer";
-import type { RandomSource } from "../core/random";
-import type { Result } from "../core/result";
-import { ok, err } from "../core/result";
+import type { RpcTransport, ResilientRpcConfig, ResilientRpcResult } from "./types.js";
+import type { EndpointRegistry } from "./types.js";
+import type { Clock } from "../core/clock.js";
+import type { Timer } from "../core/timer.js";
+import type { RandomSource } from "../core/random.js";
+import type { Result } from "../core/result.js";
+import { ok, err } from "../core/result.js";
 
 /**
  * Dependencies for resilient RPC client.

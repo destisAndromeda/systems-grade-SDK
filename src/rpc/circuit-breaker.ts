@@ -5,7 +5,7 @@
  * preventing repeated requests to a failing endpoint.
  */
 
-import type { RpcEndpointState, CircuitBreakerConfig } from "./types";
+import type { RpcEndpointState, CircuitBreakerConfig } from "./types.js";
 
 /**
  * Check if an endpoint's circuit should be opened.

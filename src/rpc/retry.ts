@@ -5,10 +5,10 @@
  * and to compute exponential backoff delays with jitter.
  */
 
-import type { RetryConfig } from "./types";
-import type { RpcAttemptResult } from "./types";
-import type { RandomSource } from "../core/random";
-import { isRetryableSdkError } from "../core/error";
+import type { RetryConfig } from "./types.js";
+import type { RpcAttemptResult } from "./types.js";
+import type { RandomSource } from "../core/random.js";
+import { isRetryableSdkError } from "../core/error.js";
 
 /**
  * Determine if a request should be retried.

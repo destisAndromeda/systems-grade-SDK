@@ -4,9 +4,9 @@
  * Allows tests to mock relay responses.
  */
 
-import type { RelayClient } from "../relay/types";
-import type { PreparedTransaction } from "../tx/types";
-import type { Result } from "../core/result";
+import type { RelayClient } from "../relay/types.js";
+import type { PreparedTransaction } from "../tx/types.js";
+import type { Result } from "../core/result.js";
 
 /**
  * Create a fake relay client for testing.

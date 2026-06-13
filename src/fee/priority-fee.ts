@@ -5,9 +5,9 @@
  * and get priority fee estimates.
  */
 
-import type { PriorityFeeEstimate, PriorityFeeProvider, PriorityFeeConfig } from "./types";
-import type { RpcTransport } from "../rpc/types";
-import type { Clock } from "../core/clock";
+import type { PriorityFeeEstimate, PriorityFeeProvider, PriorityFeeConfig } from "./types.js";
+import type { RpcTransport } from "../rpc/types.js";
+import type { Clock } from "../core/clock.js";
 
 /**
  * Create a static priority fee provider.

@@ -4,13 +4,13 @@
  * Routes transactions through relay(s) first, falling back to RPC if configured.
  */
 
-import type { RelayClient, RelayRoutingConfig, RelayRoutingResult } from "./types";
-import type { PreparedTransaction } from "../tx/types";
-import type { RpcTransport } from "../rpc/types";
-import type { Timer } from "../core/timer";
-import type { Clock } from "../core/clock";
-import type { Result } from "../core/result";
-import { ok, err } from "../core/result";
+import type { RelayClient, RelayRoutingConfig, RelayRoutingResult } from "./types.js";
+import type { PreparedTransaction } from "../tx/types.js";
+import type { RpcTransport } from "../rpc/types.js";
+import type { Timer } from "../core/timer.js";
+import type { Clock } from "../core/clock.js";
+import type { Result } from "../core/result.js";
+import { ok, err } from "../core/result.js";
 
 /**
  * Route a transaction through relay with optional RPC fallback.

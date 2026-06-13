@@ -3,7 +3,7 @@
  */
 
 import { describe, it } from "vitest";
-import { shouldRetry, computeBackoffMs } from "../../src/rpc/retry";
+import { shouldRetry, computeBackoffMs } from "../../src/rpc/retry.js";
 
 describe("shouldRetry", () => {
   it("returns false for successful result", () => {

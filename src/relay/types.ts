@@ -5,9 +5,9 @@
  * with fallback to standard RPC if relay is unavailable.
  */
 
-import type { SendTransactionResult } from "../tx/types";
-import type { PreparedTransaction } from "../tx/types";
-import type { Result } from "../core/result";
+import type { SendTransactionResult } from "../tx/types.js";
+import type { PreparedTransaction } from "../tx/types.js";
+import type { Result } from "../core/result.js";
 
 /**
  * MEV relay client interface.

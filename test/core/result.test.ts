@@ -3,7 +3,7 @@
  */
 
 import { describe, it } from "vitest";
-import { ok, err, isOk, isErr, mapResult } from "../../src/core/result";
+import { ok, err, isOk, isErr, mapResult } from "../../src/core/result.js";
 
 describe("Result", () => {
   it("ok() creates a successful Result", () => {

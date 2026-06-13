@@ -3,7 +3,7 @@
  */
 
 import { describe, it } from "vitest";
-import { isTerminalStatus } from "../../src/tx/confirm";
+import { isTerminalStatus } from "../../src/tx/confirm.js";
 
 describe("isTerminalStatus", () => {
   it("returns true for confirmed status", () => {

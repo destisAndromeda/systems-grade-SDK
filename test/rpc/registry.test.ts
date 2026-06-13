@@ -3,7 +3,7 @@
  */
 
 import { describe, it } from "vitest";
-import { createEndpointRegistry } from "../../src/rpc/registry";
+import { createEndpointRegistry } from "../../src/rpc/registry.js";
 
 describe("createEndpointRegistry", () => {
   it("creates registry from array of endpoint URLs", () => {

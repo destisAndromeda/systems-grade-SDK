@@ -5,7 +5,7 @@
  * Can be configured to send to any OTEL-compatible backend.
  */
 
-import type { MetricEvent, MetricsSink } from "./types";
+import type { MetricEvent, MetricsSink } from "./types.js";
 
 /**
  * OTEL payload mapper for metric events.

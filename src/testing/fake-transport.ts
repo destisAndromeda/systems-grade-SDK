@@ -4,8 +4,8 @@
  * Allows tests to mock RPC responses and errors.
  */
 
-import type { RpcTransport } from "../rpc/types";
-import type { SdkError } from "../core/error";
+import type { RpcTransport } from "../rpc/types.js";
+import type { SdkError } from "../core/error.js";
 
 /**
  * Create a fake RPC transport for testing.

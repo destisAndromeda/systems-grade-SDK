@@ -5,10 +5,10 @@
  * Used to intelligently select the best available endpoint for each request.
  */
 
-import type { RpcEndpointState, EndpointScoreConfig } from "./types";
-import type { Result } from "../core/result";
-import { ok, err } from "../core/result";
-import { createSdkError } from "../core/error";
+import type { RpcEndpointState, EndpointScoreConfig } from "./types.js";
+import type { Result } from "../core/result.js";
+import { ok, err } from "../core/result.js";
+import { createSdkError } from "../core/error.js";
 
 /**
  * Score an endpoint (lower is better).

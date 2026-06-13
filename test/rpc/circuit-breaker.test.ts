@@ -8,7 +8,7 @@ import {
   openCircuit,
   isCircuitOpen,
   maybeCloseCircuit,
-} from "../../src/rpc/circuit-breaker";
+} from "../../src/rpc/circuit-breaker.js";
 
 describe("shouldOpenCircuit", () => {
   it("returns true when consecutive failures reach threshold", () => {

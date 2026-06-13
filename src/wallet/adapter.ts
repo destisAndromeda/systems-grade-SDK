@@ -4,10 +4,10 @@
  * Functions to sign and send transactions via a connected wallet.
  */
 
-import type { WalletAdapter } from "./types";
-import type { RpcTransport } from "../rpc/types";
-import type { Result } from "../core/result";
-import { ok, err } from "../core/result";
+import type { WalletAdapter } from "./types.js";
+import type { RpcTransport } from "../rpc/types.js";
+import type { Result } from "../core/result.js";
+import { ok, err } from "../core/result.js";
 
 /**
  * Sign a transaction with a wallet adapter.

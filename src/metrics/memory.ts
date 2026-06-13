@@ -5,7 +5,7 @@
  * Useful for testing and debugging.
  */
 
-import type { MetricEvent, MetricsSink } from "./types";
+import type { MetricEvent, MetricsSink } from "./types.js";
 
 /**
  * Create an in-memory metrics sink.

@@ -3,7 +3,7 @@
  */
 
 import { describe, it } from "vitest";
-import { scoreEndpoint, selectBestEndpoint } from "../../src/rpc/scoring";
+import { scoreEndpoint, selectBestEndpoint } from "../../src/rpc/scoring.js";
 
 describe("scoreEndpoint", () => {
   it("returns lower score for lower latency", () => {

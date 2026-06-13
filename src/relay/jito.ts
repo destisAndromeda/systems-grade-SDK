@@ -5,11 +5,11 @@
  * Jito endpoint is specified via RPC URL.
  */
 
-import type { RelayClient } from "./types";
-import type { RpcTransport } from "../rpc/types";
-import type { PreparedTransaction } from "../tx/types";
-import type { Result } from "../core/result";
-import { ok, err } from "../core/result";
+import type { RelayClient } from "./types.js";
+import type { RpcTransport } from "../rpc/types.js";
+import type { PreparedTransaction } from "../tx/types.js";
+import type { Result } from "../core/result.js";
+import { ok, err } from "../core/result.js";
 
 /**
  * Create a Jito relay client.

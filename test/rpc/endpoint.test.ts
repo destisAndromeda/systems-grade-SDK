@@ -3,7 +3,7 @@
  */
 
 import { describe, it } from "vitest";
-import { normalizeRpcEndpointConfig, createEndpointId } from "../../src/rpc/endpoint";
+import { normalizeRpcEndpointConfig, createEndpointId } from "../../src/rpc/endpoint.js";
 
 describe("normalizeRpcEndpointConfig", () => {
   it("converts URL string to default config", () => {

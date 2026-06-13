@@ -5,10 +5,10 @@
  * Updated as requests succeed or fail.
  */
 
-import type { RpcEndpointConfig, RpcEndpointState, EndpointRegistry } from "./types";
-import type { Result } from "../core/result";
-import { ok, err } from "../core/result";
-import { normalizeRpcEndpointConfig, createInitialEndpointState } from "./endpoint";
+import type { RpcEndpointConfig, RpcEndpointState, EndpointRegistry } from "./types.js";
+import type { Result } from "../core/result.js";
+import { ok, err } from "../core/result.js";
+import { normalizeRpcEndpointConfig, createInitialEndpointState } from "./endpoint.js";
 
 /**
  * Create an in-memory registry of RPC endpoints.

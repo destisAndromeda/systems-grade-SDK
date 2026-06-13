@@ -5,10 +5,10 @@
  * initializing endpoint state, and recording success/failure outcomes.
  */
 
-import type { RpcEndpointConfig, RpcEndpointState, EndpointAttemptOutcome } from "./types";
-import type { SdkError } from "../core/error";
-import { err, ok, type Result } from "../core/result";
-import { createSdkError } from "../core/error";
+import type { RpcEndpointConfig, RpcEndpointState, EndpointAttemptOutcome } from "./types.js";
+import type { SdkError } from "../core/error.js";
+import { err, ok, type Result } from "../core/result.js";
+import { createSdkError } from "../core/error.js";
 
 /**
  * Normalize endpoint config from string or object.
@@ -87,14 +87,4 @@ export function isEndpointHealthy(
 ): boolean {
   // TODO: return true if circuit is not open and endpoint has reasonable health
   throw new Error("TODO");
-}
-
-/**
- * Outcome of a single endpoint attempt (for recording).
- */
-export interface EndpointAttemptOutcome {
-  endpointId: string;
-  success: boolean;
-  latencyMs: number;
-  error?: SdkError;
 }

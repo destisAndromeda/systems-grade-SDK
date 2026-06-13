@@ -3,7 +3,7 @@
  */
 
 import { describe, it } from "vitest";
-import { createInMemoryMetricsSink } from "../../src/metrics/memory";
+import { createInMemoryMetricsSink } from "../../src/metrics/memory.js";
 
 describe("createInMemoryMetricsSink", () => {
   it("records metric events", () => {

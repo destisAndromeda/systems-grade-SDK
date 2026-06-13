@@ -4,11 +4,11 @@
  * Top-level SDK configuration and interface.
  */
 
-import type { ResilientRpcConfig } from "../rpc/types";
-import type { RelayClient } from "../relay/types";
-import type { PriorityFeeConfig } from "../fee/types";
-import type { MetricsSink } from "../metrics/types";
-import type { WalletAdapter } from "../wallet/types";
+import type { ResilientRpcConfig } from "../rpc/types.js";
+import type { RelayClient } from "../relay/types.js";
+import type { PriorityFeeConfig } from "../fee/types.js";
+import type { MetricsSink } from "../metrics/types.js";
+import type { WalletAdapter } from "../wallet/types.js";
 
 /**
  * Complete SDK configuration.

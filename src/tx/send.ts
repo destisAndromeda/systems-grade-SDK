@@ -9,11 +9,11 @@ import type {
   PreparedTransaction,
   SendTransactionOptions,
   SendTransactionResult,
-} from "./types";
-import type { RpcTransport } from "../rpc/types";
-import type { Result } from "../core/result";
-import { ok, err } from "../core/result";
-import { createSdkError } from "../core/error";
+} from "./types.js";
+import type { RpcTransport } from "../rpc/types.js";
+import type { Result } from "../core/result.js";
+import { ok, err } from "../core/result.js";
+import { createSdkError } from "../core/error.js";
 
 /**
  * Build a prepared transaction from base64 and blockhash.

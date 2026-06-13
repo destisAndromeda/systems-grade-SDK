@@ -24,12 +24,16 @@
  */
 
 // Core
-export { Result, ok, err, isOk, isErr, mapResult, unwrapResult } from "./core/result";
-export { Clock, createSystemClock } from "./core/clock";
-export { Timer, createSystemTimer } from "./core/timer";
-export { RandomSource, createMathRandomSource } from "./core/random";
-export type { SdkError, SdkErrorKind } from "./core/error";
-export { createSdkError, isRetryableSdkError, mapToSdkError } from "./core/error";
+export type { Result } from "./core/result.js";
+export { ok, err, isOk, isErr, mapResult, unwrapResult } from "./core/result.js";
+export type { Clock } from "./core/clock.js";
+export { createSystemClock } from "./core/clock.js";
+export type { Timer } from "./core/timer.js";
+export { createSystemTimer } from "./core/timer.js";
+export type { RandomSource } from "./core/random.js";
+export { createMathRandomSource } from "./core/random.js";
+export type { SdkError, SdkErrorKind } from "./core/error.js";
+export { createSdkError, isRetryableSdkError, mapToSdkError } from "./core/error.js";
 
 // RPC
 export type {
@@ -44,7 +48,7 @@ export type {
   EndpointScoreConfig,
   ResilientRpcConfig,
   ResilientRpcResult,
-} from "./rpc/types";
+} from "./rpc/types.js";
 export {
   normalizeRpcEndpointConfig,
   createEndpointId,
@@ -53,23 +57,23 @@ export {
   recordEndpointFailure,
   applyEndpointAttemptOutcome,
   isEndpointHealthy,
-} from "./rpc/endpoint";
-export { createEndpointRegistry } from "./rpc/registry";
-export { scoreEndpoint, isEndpointCircuitOpen, selectBestEndpoint } from "./rpc/scoring";
-export { shouldRetry, computeBackoffMs } from "./rpc/retry";
-export { isWithinTimeout, createTimeoutError, withTimeout } from "./rpc/timeout";
+} from "./rpc/endpoint.js";
+export { createEndpointRegistry } from "./rpc/registry.js";
+export { scoreEndpoint, isEndpointCircuitOpen, selectBestEndpoint } from "./rpc/scoring.js";
+export { shouldRetry, computeBackoffMs } from "./rpc/retry.js";
+export { isWithinTimeout, createTimeoutError, withTimeout } from "./rpc/timeout.js";
 export {
   shouldOpenCircuit,
   openCircuit,
   isCircuitOpen,
   maybeCloseCircuit,
-} from "./rpc/circuit-breaker";
+} from "./rpc/circuit-breaker.js";
 export {
   createRpcRequestContext,
   executeRpcAttempt,
   mapTransportErrorToSdkError,
-} from "./rpc/transport";
-export { createResilientRpcClient, executeResilientRpcRequest } from "./rpc/resilient-client";
+} from "./rpc/transport.js";
+export { createResilientRpcClient, executeResilientRpcRequest } from "./rpc/resilient-client.js";
 
 // Transaction
 export type {
@@ -79,55 +83,55 @@ export type {
   TransactionStatus,
   ConfirmationConfig,
   ConfirmationResult,
-} from "./tx/types";
+} from "./tx/types.js";
 export {
   buildPreparedTransaction,
   isBlockhashExpired,
   simulateTransaction,
   sendTransactionViaRpc,
   sendTransactionWithResilience,
-} from "./tx/send";
+} from "./tx/send.js";
 export {
   fetchTransactionStatus,
   isTerminalStatus,
   pollTransactionConfirmation,
-} from "./tx/confirm";
+} from "./tx/confirm.js";
 
 // Relay
-export type { RelayClient, RelayRoutingConfig, RelayRoutingResult } from "./relay/types";
-export { routeTransaction } from "./relay/router";
-export { createJitoRelayClient } from "./relay/jito";
+export type { RelayClient, RelayRoutingConfig, RelayRoutingResult } from "./relay/types.js";
+export { routeTransaction } from "./relay/router.js";
+export { createJitoRelayClient } from "./relay/jito.js";
 
 // Fee
-export type { PriorityFeeEstimate, PriorityFeeProvider, PriorityFeeConfig } from "./fee/types";
+export type { PriorityFeeEstimate, PriorityFeeProvider, PriorityFeeConfig } from "./fee/types.js";
 export {
   createStaticPriorityFeeProvider,
   createRpcPriorityFeeProvider,
   isPriorityFeeStale,
   getPriorityFeeEstimate,
-} from "./fee/priority-fee";
+} from "./fee/priority-fee.js";
 
 // Metrics
-export type { MetricEvent, MetricsSink } from "./metrics/types";
-export { createInMemoryMetricsSink } from "./metrics/memory";
-export { createOtelMetricsSink, mapMetricEventToOtelPayload } from "./metrics/otel";
+export type { MetricEvent, MetricsSink } from "./metrics/types.js";
+export { createInMemoryMetricsSink } from "./metrics/memory.js";
+export { createOtelMetricsSink, mapMetricEventToOtelPayload } from "./metrics/otel.js";
 
 // Wallet
-export type { WalletAdapter, WalletSendOptions } from "./wallet/types";
-export { signTransactionWithWallet, sendViaWallet } from "./wallet/adapter";
+export type { WalletAdapter, WalletSendOptions } from "./wallet/types.js";
+export { signTransactionWithWallet, sendViaWallet } from "./wallet/adapter.js";
 
 // SDK
-export type { SolanaReliabilitySdkConfig, SolanaReliabilitySdk } from "./sdk/types";
-export { validateSdkConfig, createSolanaReliabilitySdk } from "./sdk/create-sdk";
+export type { SolanaReliabilitySdkConfig, SolanaReliabilitySdk } from "./sdk/types.js";
+export { validateSdkConfig, createSolanaReliabilitySdk } from "./sdk/create-sdk.js";
 
 // Testing
-export { createFakeClock } from "./testing/fake-clock";
-export { createFakeTimer } from "./testing/fake-timer";
-export { createFakeRandom } from "./testing/fake-random";
-export { createFakeRpcTransport, FakeRpcTransportBuilder } from "./testing/fake-transport";
-export { createFakeRelayClient } from "./testing/fake-relay";
-export { simulateNetworkBehavior } from "./testing/network-simulator";
+export { createFakeClock } from "./testing/fake-clock.js";
+export { createFakeTimer } from "./testing/fake-timer.js";
+export { createFakeRandom } from "./testing/fake-random.js";
+export { createFakeRpcTransport, FakeRpcTransportBuilder } from "./testing/fake-transport.js";
+export { createFakeRelayClient } from "./testing/fake-relay.js";
+export { simulateNetworkBehavior } from "./testing/network-simulator.js";
 
 // CLI
-export { runHealthCheck } from "./cli/health";
-export { runSimulation } from "./cli/simulate";
+export { runHealthCheck } from "./cli/health.js";
+export { runSimulation } from "./cli/simulate.js";

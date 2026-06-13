@@ -5,13 +5,13 @@
  * and determine when a transaction is in a terminal state.
  */
 
-import type { TransactionStatus, ConfirmationConfig, ConfirmationResult } from "./types";
-import type { RpcTransport } from "../rpc/types";
-import type { Timer } from "../core/timer";
-import type { Clock } from "../core/clock";
-import type { Result } from "../core/result";
-import { ok, err } from "../core/result";
-import { createSdkError } from "../core/error";
+import type { TransactionStatus, ConfirmationConfig, ConfirmationResult } from "./types.js";
+import type { RpcTransport } from "../rpc/types.js";
+import type { Timer } from "../core/timer.js";
+import type { Clock } from "../core/clock.js";
+import type { Result } from "../core/result.js";
+import { ok, err } from "../core/result.js";
+import { createSdkError } from "../core/error.js";
 
 /**
  * Fetch current status of a transaction.

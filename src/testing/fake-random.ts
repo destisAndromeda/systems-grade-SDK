@@ -4,7 +4,7 @@
  * Allows tests to provide scripted pseudo-random sequences.
  */
 
-import type { RandomSource } from "../core/random";
+import type { RandomSource } from "../core/random.js";
 
 /**
  * Fake random source interface (extends RandomSource with manual control).

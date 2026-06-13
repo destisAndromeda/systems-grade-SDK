@@ -3,7 +3,7 @@
  */
 
 import { describe, it } from "vitest";
-import { isPriorityFeeStale } from "../../src/fee/priority-fee";
+import { isPriorityFeeStale } from "../../src/fee/priority-fee.js";
 
 describe("createStaticPriorityFeeProvider", () => {
   it("returns configured fee estimate", () => {

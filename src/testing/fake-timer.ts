@@ -4,8 +4,8 @@
  * Allows tests to schedule callbacks and execute them manually.
  */
 
-import type { Timer } from "../core/timer";
-import type { FakeClock } from "./fake-clock";
+import type { Timer } from "../core/timer.js";
+import type { FakeClock } from "./fake-clock.js";
 
 /**
  * Fake timer interface (extends Timer with manual control).
