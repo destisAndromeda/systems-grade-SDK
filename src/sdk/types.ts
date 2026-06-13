@@ -8,7 +8,7 @@ import type { ResilientRpcConfig } from "../rpc/types.js";
 import type { RelayClient } from "../relay/types.js";
 import type { PriorityFeeConfig } from "../fee/types.js";
 import type { MetricsSink } from "../metrics/types.js";
-import type { WalletAdapter } from "../wallet/types.js";
+import type { TransactionWallet } from "../wallet/types.js";
 
 /**
  * Complete SDK configuration.
@@ -34,7 +34,7 @@ export interface SolanaReliabilitySdkConfig {
   metricsSink?: MetricsSink; // Optional metrics sink for observability
 
   // Wallet (optional)
-  wallet?: WalletAdapter; // Optional wallet for signing
+  wallet?: TransactionWallet; // Optional wallet for signing
 }
 
 /**

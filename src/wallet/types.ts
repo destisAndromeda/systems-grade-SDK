@@ -1,41 +1,37 @@
 /**
  * Wallet adapter types.
  *
- * Interface for connecting wallets to the SDK.
- * Abstracts wallet signing so tests can use fake wallets.
+ * Minimal interface for signing transactions with a wallet.
  */
 
 /**
- * Wallet adapter interface.
- * Handles signing transactions and returning public key.
+ * Wallet interface for signing transactions.
  */
-export interface WalletAdapter {
-  /**
-   * Get the wallet's public key (as base58 string).
-   */
-  getPublicKey(): string;
-
-  /**
-   * Sign a message.
-   *
-   * @param message Message bytes to sign
-   * @returns Signature bytes, or error
-   */
-  signMessage(message: Uint8Array): Promise<Uint8Array>;
+export interface TransactionWallet {
+  publicKey?: string;
 
   /**
    * Sign a transaction.
    *
-   * @param transaction Base64-encoded transaction to sign
-   * @returns Base64-encoded signed transaction, or error
+   * @param base64 Base64-encoded transaction to sign
+   * @returns Signed transaction result or error
    */
-  signTransaction(transaction: string): Promise<string>;
+  signTransaction(base64: string): Promise<WalletSignResult>;
 }
 
 /**
- * Options for wallet-based transaction sending.
+ * Result of signing a transaction with a wallet.
  */
-export interface WalletSendOptions {
-  skipPreflight?: boolean;
-  preflightCommitment?: string;
+export interface WalletSignResult {
+  signedBase64: string;
+  publicKey?: string;
 }
+
+/**
+ * Result of sending a transaction via wallet.
+ */
+export interface WalletSendResult {
+  signature: string;
+  endpointId: string;
+}
+

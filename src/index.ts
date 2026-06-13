@@ -99,7 +99,13 @@ export {
 } from "./tx/confirm.js";
 
 // Relay
-export type { RelayClient, RelayRoutingConfig, RelayRoutingResult } from "./relay/types.js";
+export type {
+  RelaySendResult,
+  RelayClient,
+  RelayRoutingConfig,
+  TransactionRoute,
+  RoutedTransactionResult,
+} from "./relay/types.js";
 export { routeTransaction } from "./relay/router.js";
 export { createJitoRelayClient } from "./relay/jito.js";
 
@@ -118,7 +124,11 @@ export { createInMemoryMetricsSink } from "./metrics/memory.js";
 export { createOtelMetricsSink, mapMetricEventToOtelPayload } from "./metrics/otel.js";
 
 // Wallet
-export type { WalletAdapter, WalletSendOptions } from "./wallet/types.js";
+export type {
+  TransactionWallet,
+  WalletSignResult,
+  WalletSendResult,
+} from "./wallet/types.js";
 export { signTransactionWithWallet, sendViaWallet } from "./wallet/adapter.js";
 
 // SDK
