@@ -8,17 +8,37 @@
 import type { MetricEvent, MetricsSink } from "./types.js";
 
 /**
- * OTEL payload mapper for metric events.
+ * OTEL payload for metric events.
  */
 export interface OtelPayload {
   name: string;
-  value: number;
-  attributes?: Record<string, string | number>;
-  timestamp?: number;
+  timestampMs: number;
+  attributes: Record<string, string | number | boolean>;
+}
+
+/**
+ * Map a metric event to an OTEL payload.
+ *
+ * Converts SDK metric events to OpenTelemetry format by:
+ * - Prefixing event type with "sdk."
+ * - Preserving timestamp
+ * - Copying attributes (or using empty object if missing)
+ *
+ * @param event Metric event
+ * @returns OTEL payload
+ */
+export function mapMetricEventToOtelPayload(event: MetricEvent): OtelPayload {
+  return {
+    name: `sdk.${event.type}`,
+    timestampMs: event.timestampMs,
+    attributes: event.attributes ?? {},
+  };
 }
 
 /**
  * Create an OpenTelemetry metrics sink.
+ *
+ * Creates a sink that maps metric events to OTEL format and sends them.
  *
  * @param onSend Callback to send OTEL payload (e.g. to a collector)
  * @returns Metrics sink
@@ -26,17 +46,10 @@ export interface OtelPayload {
 export function createOtelMetricsSink(
   onSend: (payload: OtelPayload) => void,
 ): MetricsSink {
-  // TODO: return sink that maps MetricEvent to OtelPayload and calls onSend
-  throw new Error("TODO");
-}
-
-/**
- * Map a metric event to an OTEL payload.
- *
- * @param event Metric event
- * @returns OTEL payload
- */
-export function mapMetricEventToOtelPayload(event: MetricEvent): OtelPayload {
-  // TODO: convert MetricEvent to OtelPayload with appropriate name and attributes
-  throw new Error("TODO");
+  return {
+    record(event: MetricEvent): void {
+      const payload = mapMetricEventToOtelPayload(event);
+      onSend(payload);
+    },
+  };
 }

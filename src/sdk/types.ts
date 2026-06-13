@@ -4,87 +4,134 @@
  * Top-level SDK configuration and interface.
  */
 
-import type { ResilientRpcConfig } from "../rpc/types.js";
+import type { ResilientRpcConfig, RpcTransport } from "../rpc/types.js";
 import type { RelayClient } from "../relay/types.js";
-import type { PriorityFeeConfig } from "../fee/types.js";
-import type { MetricsSink } from "../metrics/types.js";
+import type { PriorityFeeConfig, PriorityFeeEstimate } from "../fee/types.js";
+import type { MetricsSink, MetricEvent } from "../metrics/types.js";
 import type { TransactionWallet } from "../wallet/types.js";
+import type { SendTransactionOptions, ConfirmationConfig } from "../tx/types.js";
+import type { Result } from "../core/result.js";
+import type { SdkError } from "../core/error.js";
 
 /**
  * Complete SDK configuration.
  */
 export interface SolanaReliabilitySdkConfig {
-  // RPC configuration
-  rpcEndpoints: string[]; // Array of RPC endpoint URLs
-  rpcConfig?: Partial<ResilientRpcConfig>; // Optional overrides for retry/circuit/scoring
+  // RPC endpoints
+  endpoints: string[];
 
-  // Transaction configuration
-  confirmationTimeoutMs?: number; // Timeout for transaction confirmation (default: 60000)
-  confirmationIntervalMs?: number; // Polling interval for confirmation (default: 1000)
+  // Retry policy
+  retry?: Partial<{
+    maxAttempts: number;
+    baseDelayMs: number;
+    maxDelayMs: number;
+    jitterRatio: number;
+  }>;
 
-  // Priority fee configuration
-  priorityFeeConfig?: PriorityFeeConfig; // Fee estimation config
-  priorityFeeMicroLamports?: number; // Static priority fee (overrides providers)
+  // Circuit breaker policy
+  circuitBreaker?: Partial<{
+    failureThreshold: number;
+    cooldownMs: number;
+    halfOpenAttemptsPerWindow: number;
+  }>;
 
-  // Relay configuration
-  relayClient?: RelayClient | null; // Optional MEV relay (e.g. Jito)
-  relayFallbackToRpc?: boolean; // Fall back to RPC if relay fails (default: true)
+  // Default timeout
+  defaultTimeoutMs?: number;
 
-  // Metrics
-  metricsSink?: MetricsSink; // Optional metrics sink for observability
+  // Transaction confirmation
+  confirmation?: Partial<ConfirmationConfig>;
 
-  // Wallet (optional)
-  wallet?: TransactionWallet; // Optional wallet for signing
+  // Priority fee
+  priorityFee?: PriorityFeeConfig;
+
+  // Relay routing
+  relay?: RelayClient;
+  relayRouting?: Partial<{
+    preferRelay: boolean;
+    fallbackToRpc: boolean;
+  }>;
+
+  // Wallet adapter
+  wallet?: TransactionWallet;
+
+  // Metrics sink
+  metrics?: MetricsSink;
 }
 
 /**
  * Solana Reliability SDK facade.
  *
- * Provides high-level methods for:
- *  - Sending transactions with resilience
- *  - Confirming transactions
- *  - Getting priority fee estimates
- *  - Accessing registry/health info
+ * Provides high-level methods for sending, confirming, and managing transactions
+ * with automatic resilience, retry logic, circuit breaking, and metrics.
  */
 export interface SolanaReliabilitySdk {
   /**
-   * Send a prepared transaction.
-   *
-   * @param transactionBase64 Base64-encoded transaction
-   * @param blockhash Recent blockhash
-   * @param lastValidBlockHeight Block height for blockhash expiry
-   * @returns Transaction signature
+   * Resilient RPC transport for direct method calls.
    */
-  sendTransaction(
-    transactionBase64: string,
-    blockhash: string,
-    lastValidBlockHeight: number,
-  ): Promise<string>;
+  rpc: RpcTransport;
 
   /**
-   * Confirm a transaction signature.
+   * Send a prepared transaction with resilience.
    *
-   * @param signature Transaction signature to confirm
-   * @returns Confirmation result
+   * Routes through relay if configured, falls back to RPC, and records metrics.
+   *
+   * @param base64 Base64-encoded transaction
+   * @param blockhash Recent blockhash
+   * @param lastValidBlockHeight Block height for blockhash expiry
+   * @param options Optional send options (skipPreflight, maxRetries, etc.)
+   * @returns Transaction signature or error
    */
-  confirmTransaction(signature: string): Promise<{ confirmed: boolean; slot?: number }>;
+  sendTransaction(
+    base64: string,
+    blockhash: string,
+    lastValidBlockHeight: number,
+    options?: SendTransactionOptions,
+  ): Promise<Result<string, SdkError>>;
+
+  /**
+   * Confirm a transaction with polling.
+   *
+   * Polls for confirmation status until timeout or terminal state.
+   *
+   * @param signature Transaction signature
+   * @param config Optional confirmation config overrides
+   * @returns Confirmation status or error
+   */
+  confirmTransaction(
+    signature: string,
+    config?: Partial<ConfirmationConfig>,
+  ): Promise<Result<{ confirmed: boolean; slot?: number }, SdkError>>;
 
   /**
    * Get current priority fee estimate.
    *
-   * @returns Priority fee in microlamports
+   * Tries RPC provider, falls back to static fee, returns error if both fail.
+   *
+   * @returns Priority fee in microlamports or error
    */
-  getPriorityFee(): Promise<number>;
+  getPriorityFee(): Promise<Result<number, SdkError>>;
 
   /**
-   * Get registry of RPC endpoints and their health.
+   * Get health information for all RPC endpoints.
+   *
+   * Returns synchronously without network calls.
+   *
+   * @returns Array of endpoint health information
    */
-  getEndpointHealth(): Promise<{
-    endpoints: Array<{
-      url: string;
-      healthy: boolean;
-      successRate: number;
-      avgLatencyMs: number;
-    }>;
+  getEndpointHealth(): Array<{
+    id: string;
+    url: string;
+    successCount: number;
+    failureCount: number;
+    consecutiveFailures: number;
+    avgLatencyMs: number;
+    circuitOpen: boolean;
   }>;
+
+  /**
+   * Get recorded metrics (if using in-memory sink).
+   *
+   * @returns Array of metric events or undefined if not available
+   */
+  getMetrics?(): MetricEvent[];
 }

@@ -119,8 +119,9 @@ export {
 } from "./fee/priority-fee.js";
 
 // Metrics
-export type { MetricEvent, MetricsSink } from "./metrics/types.js";
+export type { MetricEventType, MetricEvent, MetricsSink } from "./metrics/types.js";
 export { createInMemoryMetricsSink } from "./metrics/memory.js";
+export type { OtelPayload } from "./metrics/otel.js";
 export { createOtelMetricsSink, mapMetricEventToOtelPayload } from "./metrics/otel.js";
 
 // Wallet
