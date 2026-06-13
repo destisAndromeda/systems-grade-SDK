@@ -80,9 +80,10 @@ export type {
   PreparedTransaction,
   SendTransactionOptions,
   SendTransactionResult,
-  TransactionStatus,
+  TransactionSimulationResult,
+  TransactionConfirmationStatus,
   ConfirmationConfig,
-  ConfirmationResult,
+  PollTransactionConfirmationResult,
 } from "./tx/types.js";
 export {
   buildPreparedTransaction,

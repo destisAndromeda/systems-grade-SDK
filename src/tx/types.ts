@@ -15,12 +15,11 @@ export interface PreparedTransaction {
 }
 
 /**
- * Options for sending a transaction.
+ * Result of transaction simulation.
  */
-export interface SendTransactionOptions {
-  skipPreflight?: boolean;
-  preflightCommitment?: string;
-  maxRetries?: number;
+export interface TransactionSimulationResult {
+  logs: string[];
+  unitsConsumed?: number;
 }
 
 /**
@@ -32,29 +31,38 @@ export interface SendTransactionResult {
 }
 
 /**
- * Status of a transaction on chain.
+ * Options for sending a transaction.
  */
-export type TransactionStatus =
-  | { kind: "pending"; signature: string }
-  | { kind: "confirmed"; signature: string; slot: number }
-  | { kind: "finalized"; signature: string; slot: number }
-  | { kind: "failed"; signature: string; error?: string }
-  | { kind: "timeout"; signature: string };
+export interface SendTransactionOptions {
+  skipPreflight?: boolean;
+  maxRetries?: number;
+  currentBlockHeight?: number;
+}
+
+/**
+ * Transaction confirmation status union.
+ */
+export type TransactionConfirmationStatus =
+  | { kind: "pending" }
+  | { kind: "confirmed"; slot?: number }
+  | { kind: "finalized"; slot?: number }
+  | { kind: "failed"; error: string; slot?: number };
 
 /**
  * Configuration for polling confirmation.
  */
 export interface ConfirmationConfig {
-  maxWaitMs: number; // Max time to wait for confirmation
-  pollIntervalMs: number; // Interval between status checks
-  commitment?: string; // "confirmed", "finalized", etc.
+  commitment?: "confirmed" | "finalized";
+  pollIntervalMs: number;
+  timeoutMs: number;
 }
 
 /**
  * Result of confirmation polling.
  */
-export interface ConfirmationResult {
+export interface PollTransactionConfirmationResult {
   signature: string;
-  status: TransactionStatus;
-  totalWaitMs: number;
+  status: TransactionConfirmationStatus;
+  attempts: number;
+  elapsedMs: number;
 }

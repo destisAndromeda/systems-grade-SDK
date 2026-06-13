@@ -59,10 +59,10 @@ export function createResilientRpcClient(
       params: TParams,
       options?: { timeoutMs?: number },
     ): Promise<TResult> {
-      const result = await executeResilientRpcRequest(method, params, transports, config, deps);
+      const result = await executeResilientRpcRequest<TParams, TResult>(method, params, transports, config, deps);
 
       if (result.ok) {
-        return result.value.value;
+        return result.value.value as TResult;
       } else {
         throw result.error;
       }
@@ -159,7 +159,7 @@ export async function executeResilientRpcRequest<TParams, TResult>(
       deps.registry.upsert(successState);
 
       return ok({
-        value: attemptResult.value,
+        value: attemptResult.value as TResult,
         endpointId: attemptResult.endpointId,
         attempts,
         latencyMs: totalLatencyMs,

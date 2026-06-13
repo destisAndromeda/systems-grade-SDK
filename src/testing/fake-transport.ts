@@ -45,7 +45,11 @@ export function createFakeRpcTransport(config: {
       params: TParams,
       options?: { timeoutMs?: number },
     ): Promise<TResult> {
-      calls.push({ method, params, options });
+      const call: { method: string; params: TParams; options?: { timeoutMs?: number } } = { method, params };
+      if (options !== undefined) {
+        call.options = options;
+      }
+      calls.push(call);
 
       const response = responses.get(method);
       if (!response) {

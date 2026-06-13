@@ -4,12 +4,15 @@
  * Data structures for fee estimation providers.
  */
 
+import type { Result } from "../core/result.js";
+import type { SdkError } from "../core/error.js";
+
 /**
  * Priority fee estimate.
  */
 export interface PriorityFeeEstimate {
   priorityFeeMicroLamports: number;
-  source: string; // e.g. "helius", "static", "rpc"
+  source: string; // e.g. "static", "rpc", "fallback"
   fetchedAtMs: number; // When this estimate was fetched
 }
 
@@ -25,7 +28,7 @@ export interface PriorityFeeProvider {
    * @param nowMs Current time for staleness checking
    * @returns Fee estimate or error
    */
-  getEstimate(nowMs: number): Promise<PriorityFeeEstimate>;
+  getEstimate(nowMs: number): Promise<Result<PriorityFeeEstimate, SdkError>>;
 }
 
 /**

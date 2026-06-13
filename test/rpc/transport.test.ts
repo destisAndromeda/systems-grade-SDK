@@ -271,7 +271,7 @@ describe("executeRpcAttempt", () => {
     const transport = createFakeRpcTransport({
       endpointUrl: "https://api.solana.com",
       endpointId: "solana-rpc",
-      responses: new Map([["getBalance", { error: new Error("Unknown error") }]]),
+      responses: new Map([["getBalance", { error: createSdkError("Unknown", "Unknown error") }]]),
     });
 
     const clock = new FakeClock();

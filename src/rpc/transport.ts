@@ -55,9 +55,8 @@ export async function executeRpcAttempt<TParams, TResult>(
 
   try {
     // Create the send promise
-    let promise = transport.send<TParams, TResult>(context.method, context.params, {
-      timeoutMs: context.timeoutMs,
-    });
+    const options = context.timeoutMs !== undefined ? { timeoutMs: context.timeoutMs } : undefined;
+    let promise = transport.send<TParams, TResult>(context.method, context.params, options);
 
     // Wrap with timeout if context has timeout and we have a timer
     if (context.timeoutMs !== undefined && timer !== undefined) {

@@ -9,7 +9,7 @@ import { FakeClock } from "../../src/testing/fake-clock.js";
 import { FakeTimer } from "../../src/testing/fake-timer.js";
 import { FakeRandom } from "../../src/testing/fake-random.js";
 import { createFakeRpcTransport } from "../../src/testing/fake-transport.js";
-import { createSdkError } from "../../src/core/error.js";
+import { createSdkError, isKindOfSdkError } from "../../src/core/error.js";
 import { isOk } from "../../src/core/result.js";
 
 describe("executeResilientRpcRequest", () => {
@@ -351,7 +351,7 @@ describe("executeResilientRpcRequest", () => {
 
     expect(isOk(result)).toBe(false);
     if (!isOk(result)) {
-      expect(result.error.kind).toBe("InvalidConfig");
+      expect(isKindOfSdkError(result.error) && result.error.kind).toBe("InvalidConfig");
     }
   });
 
@@ -385,7 +385,7 @@ describe("executeResilientRpcRequest", () => {
 
     expect(isOk(result)).toBe(false);
     if (!isOk(result)) {
-      expect(result.error.kind).toBe("InvalidResponse");
+      expect(isKindOfSdkError(result.error) && result.error.kind).toBe("InvalidResponse");
     }
   });
 
@@ -494,7 +494,7 @@ describe("executeResilientRpcRequest", () => {
 
     expect(isOk(result)).toBe(false);
     if (!isOk(result)) {
-      expect(result.error.kind).toBe("AllEndpointsFailed");
+      expect(isKindOfSdkError(result.error) && result.error.kind).toBe("AllEndpointsFailed");
     }
   });
 
@@ -712,7 +712,7 @@ describe("executeResilientRpcRequest", () => {
 
     expect(isOk(result)).toBe(false);
     if (!isOk(result)) {
-      expect(result.error.kind).toBe("AllEndpointsFailed");
+      expect(isKindOfSdkError(result.error) && result.error.kind).toBe("AllEndpointsFailed");
     }
   });
 

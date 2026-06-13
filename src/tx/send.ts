@@ -9,11 +9,13 @@ import type {
   PreparedTransaction,
   SendTransactionOptions,
   SendTransactionResult,
+  TransactionSimulationResult,
 } from "./types.js";
 import type { RpcTransport } from "../rpc/types.js";
 import type { Result } from "../core/result.js";
 import { ok, err } from "../core/result.js";
-import { createSdkError } from "../core/error.js";
+import { createSdkError, isKindOfSdkError } from "../core/error.js";
+import { mapTransportErrorToSdkError } from "../rpc/transport.js";
 
 /**
  * Build a prepared transaction from base64 and blockhash.
@@ -30,8 +32,52 @@ export function buildPreparedTransaction(
   blockhash: string,
   lastValidBlockHeight: number,
 ): Result<PreparedTransaction> {
-  // TODO: validate base64 format, blockhash, and block height, return ok/err
-  throw new Error("TODO");
+  // Validate base64
+  if (!base64 || typeof base64 !== "string") {
+    return err(createSdkError("InvalidTransaction", "base64 must be a non-empty string"));
+  }
+
+  // Validate base64 format and decode
+  let decodedBytes: Buffer;
+  try {
+    decodedBytes = Buffer.from(base64, "base64");
+    // Validate by re-encoding - if it doesn't match, base64 was invalid
+    if (decodedBytes.toString("base64") !== base64) {
+      return err(createSdkError("InvalidTransaction", "Invalid base64 format"));
+    }
+  } catch {
+    return err(createSdkError("InvalidTransaction", "Invalid base64 format"));
+  }
+
+  // Check decoded bytes are not empty
+  if (decodedBytes.length === 0) {
+    return err(createSdkError("InvalidTransaction", "Decoded transaction is empty"));
+  }
+
+  // Validate blockhash
+  if (!blockhash || typeof blockhash !== "string") {
+    return err(createSdkError("InvalidTransaction", "blockhash must be a non-empty string"));
+  }
+
+  // Validate blockhash is not just whitespace
+  if (blockhash.trim().length === 0) {
+    return err(createSdkError("InvalidTransaction", "blockhash must not be whitespace-only"));
+  }
+
+  // Validate lastValidBlockHeight
+  if (!Number.isInteger(lastValidBlockHeight) || lastValidBlockHeight <= 0) {
+    return err(createSdkError("InvalidTransaction", "lastValidBlockHeight must be a positive integer"));
+  }
+
+  if (!Number.isSafeInteger(lastValidBlockHeight)) {
+    return err(createSdkError("InvalidTransaction", "lastValidBlockHeight is not a safe integer"));
+  }
+
+  return ok({
+    base64,
+    blockhash,
+    lastValidBlockHeight,
+  });
 }
 
 /**
@@ -45,8 +91,7 @@ export function isBlockhashExpired(
   prepared: PreparedTransaction,
   currentBlockHeight: number,
 ): boolean {
-  // TODO: return true if currentBlockHeight > lastValidBlockHeight
-  throw new Error("TODO");
+  return currentBlockHeight > prepared.lastValidBlockHeight;
 }
 
 /**
@@ -59,9 +104,74 @@ export function isBlockhashExpired(
 export async function simulateTransaction(
   transport: RpcTransport,
   prepared: PreparedTransaction,
-): Promise<Result<{ logs: string[]; unitsConsumed?: number }>> {
-  // TODO: call simulateTransaction RPC, parse result, return ok/err
-  throw new Error("TODO");
+): Promise<Result<TransactionSimulationResult>> {
+  try {
+    const response = await transport.send<
+      unknown[],
+      { value?: { logs?: string[]; unitsConsumed?: number } } | { logs?: string[]; unitsConsumed?: number }
+    >("simulateTransaction", [prepared.base64, { encoding: "base64" }]);
+
+    // Parse response - handle both { value: {...} } and direct {...} shapes
+    let data: unknown;
+
+    if (!response || typeof response !== "object") {
+      return err(createSdkError("InvalidResponse", "simulateTransaction response must be an object"));
+    }
+
+    // If response has "value", extract it; otherwise use response directly
+    if ("value" in response) {
+      if (response.value && typeof response.value === "object") {
+        data = response.value;
+      } else {
+        return err(createSdkError("InvalidResponse", "simulateTransaction value must be an object"));
+      }
+    } else {
+      data = response;
+    }
+
+    // Validate data is object-like (could be unknown)
+    if (!data || typeof data !== "object") {
+      return err(createSdkError("InvalidResponse", "simulateTransaction response must be an object"));
+    }
+
+    // Now safe to check properties
+    const dataObj = data as Record<string, unknown>;
+
+    if (!("logs" in dataObj) || !Array.isArray(dataObj.logs)) {
+      return err(createSdkError("InvalidResponse", "simulateTransaction response must have logs array"));
+    }
+
+    // Validate every log entry is a string
+    for (const log of dataObj.logs) {
+      if (typeof log !== "string") {
+        return err(createSdkError("InvalidResponse", "simulateTransaction logs must contain only strings"));
+      }
+    }
+
+    // Validate unitsConsumed if present
+    let unitsConsumed: number | undefined;
+    if ("unitsConsumed" in dataObj) {
+      if (typeof dataObj.unitsConsumed !== "number") {
+        return err(createSdkError("InvalidResponse", "simulateTransaction unitsConsumed must be a number"));
+      }
+      unitsConsumed = dataObj.unitsConsumed;
+    }
+
+    // Build result, conditionally including unitsConsumed
+    const result: TransactionSimulationResult = {
+      logs: dataObj.logs as string[],
+    };
+    if (unitsConsumed !== undefined) {
+      result.unitsConsumed = unitsConsumed;
+    }
+
+    return ok(result);
+  } catch (error: unknown) {
+    if (isKindOfSdkError(error)) {
+      return err(error);
+    }
+    return err(mapTransportErrorToSdkError(error));
+  }
 }
 
 /**
@@ -77,28 +187,85 @@ export async function sendTransactionViaRpc(
   prepared: PreparedTransaction,
   options?: SendTransactionOptions,
 ): Promise<Result<SendTransactionResult>> {
-  // TODO: call sendTransaction RPC, extract signature, return ok/err
-  throw new Error("TODO");
+  try {
+    const sendOptions: {
+      encoding: string;
+      skipPreflight?: boolean;
+      maxRetries?: number;
+    } = {
+      encoding: "base64",
+    };
+
+    if (options?.skipPreflight !== undefined) {
+      sendOptions.skipPreflight = options.skipPreflight;
+    }
+
+    if (options?.maxRetries !== undefined) {
+      sendOptions.maxRetries = options.maxRetries;
+    }
+
+    const response = await transport.send<
+      unknown[],
+      string | { result?: string; signature?: string }
+    >("sendTransaction", [prepared.base64, sendOptions]);
+
+    // Parse signature from various response shapes
+    let signature: string | undefined;
+
+    if (typeof response === "string") {
+      signature = response;
+    } else if (response && typeof response === "object") {
+      if ("result" in response) {
+        if (typeof response.result !== "string") {
+          return err(createSdkError("InvalidResponse", "sendTransaction result must be a string"));
+        }
+        signature = response.result;
+      } else if ("signature" in response) {
+        if (typeof response.signature !== "string") {
+          return err(createSdkError("InvalidResponse", "sendTransaction signature must be a string"));
+        }
+        signature = response.signature;
+      }
+    }
+
+    if (!signature || signature.trim().length === 0) {
+      return err(createSdkError("InvalidResponse", "sendTransaction response missing or empty signature"));
+    }
+
+    return ok({
+      signature,
+      endpointId: transport.endpointId,
+    });
+  } catch (error: unknown) {
+    if (isKindOfSdkError(error)) {
+      return err(error);
+    }
+    return err(mapTransportErrorToSdkError(error));
+  }
 }
 
 /**
  * Send a transaction using resilient RPC (with retry and fallback).
  *
- * Rejects if blockhash is already expired.
+ * Checks blockhash expiry if currentBlockHeight is provided.
  *
- * @param prepared Prepared transaction
- * @param currentBlockHeight Current block height (to check expiry)
  * @param transport Resilient RPC transport
- * @param options Send options
+ * @param prepared Prepared transaction
+ * @param options Send options (including optional currentBlockHeight)
  * @returns Transaction signature and endpoint ID, or error
  */
 export async function sendTransactionWithResilience(
-  prepared: PreparedTransaction,
-  currentBlockHeight: number,
   transport: RpcTransport,
+  prepared: PreparedTransaction,
   options?: SendTransactionOptions,
 ): Promise<Result<SendTransactionResult>> {
-  // TODO: check if blockhash expired, return err early if so,
-  // else delegate to sendTransactionViaRpc
-  throw new Error("TODO");
+  // Check if blockhash is expired, if currentBlockHeight is provided
+  if (options?.currentBlockHeight !== undefined) {
+    if (isBlockhashExpired(prepared, options.currentBlockHeight)) {
+      return err(createSdkError("InvalidTransaction", "Blockhash has expired"));
+    }
+  }
+
+  // Otherwise delegate to sendTransactionViaRpc
+  return sendTransactionViaRpc(transport, prepared, options);
 }
