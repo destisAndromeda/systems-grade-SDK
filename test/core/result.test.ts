@@ -2,31 +2,50 @@
  * Tests for result type and utilities.
  */
 
-import { describe, it } from "vitest";
-import { ok, err, isOk, isErr, mapResult } from "../../src/core/result.js";
+import { describe, it, expect } from "vitest";
+import { ok, err, isOk, isErr, mapResult, unwrapResult } from "../../src/core/result.js";
 
 describe("Result", () => {
   it("ok() creates a successful Result", () => {
-    // TODO: assert ok(42) returns { ok: true, value: 42 }
+    const result = ok(42);
+    expect(result).toEqual({ ok: true, value: 42 });
   });
 
   it("err() creates a failed Result", () => {
-    // TODO: assert err(new Error("test")) returns { ok: false, error: ... }
+    const error = new Error("test error");
+    const result = err(error);
+    expect(result).toEqual({ ok: false, error });
   });
 
   it("isOk() correctly identifies success", () => {
-    // TODO: assert isOk(ok(1)) === true, isOk(err(new Error())) === false
+    expect(isOk(ok(1))).toBe(true);
+    expect(isOk(err(new Error()))).toBe(false);
   });
 
   it("isErr() correctly identifies failure", () => {
-    // TODO: assert isErr(err(new Error())) === true, isErr(ok(1)) === false
+    expect(isErr(err(new Error()))).toBe(true);
+    expect(isErr(ok(1))).toBe(false);
   });
 
   it("mapResult() transforms value on success", () => {
-    // TODO: assert mapResult(ok(2), x => x * 2) returns ok(4)
+    const result = mapResult(ok(2), (x) => x * 2);
+    expect(result).toEqual({ ok: true, value: 4 });
   });
 
   it("mapResult() passes through error unchanged", () => {
-    // TODO: assert mapResult(err(e), ...) returns same error unchanged
+    const error = new Error("test");
+    const result = err(error);
+    const mapped = mapResult(result, () => 99);
+    expect(mapped).toBe(result);
+  });
+
+  it("unwrapResult() returns value on success", () => {
+    const value = unwrapResult(ok(42));
+    expect(value).toBe(42);
+  });
+
+  it("unwrapResult() throws error on failure", () => {
+    const error = new Error("test error");
+    expect(() => unwrapResult(err(error))).toThrow(error);
   });
 });

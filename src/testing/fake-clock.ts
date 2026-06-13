@@ -28,6 +28,19 @@ export interface FakeClock extends Clock {
  * @returns Fake clock
  */
 export function createFakeClock(startMs: number = 0): FakeClock {
-  // TODO: implement clock with advance and set methods
-  throw new Error("TODO");
+  let currentTime = startMs;
+
+  return {
+    now(): number {
+      return currentTime;
+    },
+
+    advance(ms: number): void {
+      currentTime += ms;
+    },
+
+    set(ms: number): void {
+      currentTime = ms;
+    },
+  };
 }

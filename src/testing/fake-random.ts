@@ -23,6 +23,18 @@ export interface FakeRandom extends RandomSource {
  * @returns Fake random source
  */
 export function createFakeRandom(defaultValue: number = 0): FakeRandom {
-  // TODO: implement random source that returns scripted values then default
-  throw new Error("TODO");
+  const queue: number[] = [];
+
+  return {
+    next(): number {
+      if (queue.length > 0) {
+        return queue.shift()!;
+      }
+      return defaultValue;
+    },
+
+    pushSequence(values: number[]): void {
+      queue.push(...values);
+    },
+  };
 }

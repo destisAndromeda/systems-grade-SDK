@@ -33,6 +33,53 @@ export interface FakeTimer extends Timer {
  * @returns Fake timer
  */
 export function createFakeTimer(): FakeTimer {
-  // TODO: implement timer that stores callbacks and executes them manually
-  throw new Error("TODO");
+  interface ScheduledCallback {
+    id: number;
+    fn: () => void;
+    dueAt: number;
+  }
+
+  let nextId = 1;
+  let currentTime = 0;
+  const scheduled: ScheduledCallback[] = [];
+
+  return {
+    setTimeout(fn: () => void, ms: number): unknown {
+      const id = nextId++;
+      const dueAt = currentTime + ms;
+      scheduled.push({ id, fn, dueAt });
+      return id;
+    },
+
+    clearTimeout(handle: unknown): void {
+      const id = handle as number;
+      const index = scheduled.findIndex((cb) => cb.id === id);
+      if (index >= 0) {
+        scheduled.splice(index, 1);
+      }
+    },
+
+    pendingCount(): number {
+      return scheduled.length;
+    },
+
+    flushAll(): void {
+      // Execute all callbacks immediately, in order they were scheduled
+      while (scheduled.length > 0) {
+        const cb = scheduled.shift()!;
+        cb.fn();
+      }
+    },
+
+    advanceAndFlush(ms: number, clock: FakeClock): void {
+      currentTime += ms;
+      clock.advance(ms);
+
+      // Execute callbacks whose dueAt time has passed
+      while (scheduled.length > 0 && scheduled[0].dueAt <= currentTime) {
+        const cb = scheduled.shift()!;
+        cb.fn();
+      }
+    },
+  };
 }

@@ -2,37 +2,67 @@
  * Tests for error types and utilities.
  */
 
-import { describe, it } from "vitest";
+import { describe, it, expect } from "vitest";
 import { createSdkError, isRetryableSdkError } from "../../src/core/error.js";
 
 describe("createSdkError", () => {
   it("creates an error with correct kind and message", () => {
-    // TODO: assert error.kind === "Timeout" and error.message includes text
+    const error = createSdkError("Timeout", "Request timed out");
+    expect(error.kind).toBe("Timeout");
+    expect(error.message).toBe("Request timed out");
+    expect(error.name).toBe("SdkError[Timeout]");
   });
 
   it("sets retryable=true for Timeout by default", () => {
-    // TODO: assert createSdkError("Timeout", "...").retryable === true
+    const error = createSdkError("Timeout", "Request timed out");
+    expect(error.retryable).toBe(true);
   });
 
   it("sets retryable=true for NetworkError by default", () => {
-    // TODO: assert createSdkError("NetworkError", "...").retryable === true
+    const error = createSdkError("NetworkError", "Network failed");
+    expect(error.retryable).toBe(true);
+  });
+
+  it("sets retryable=true for RateLimited by default", () => {
+    const error = createSdkError("RateLimited", "Too many requests");
+    expect(error.retryable).toBe(true);
+  });
+
+  it("sets retryable=false for non-retryable errors by default", () => {
+    const error = createSdkError("InvalidConfig", "Bad config");
+    expect(error.retryable).toBe(false);
   });
 
   it("respects explicit retryable override", () => {
-    // TODO: assert createSdkError("Unknown", "...", { retryable: true }).retryable === true
+    const error = createSdkError("Unknown", "Something", { retryable: true });
+    expect(error.retryable).toBe(true);
+  });
+
+  it("respects explicit retryable=false override", () => {
+    const error = createSdkError("Timeout", "Timeout", { retryable: false });
+    expect(error.retryable).toBe(false);
+  });
+
+  it("includes cause when provided", () => {
+    const cause = new Error("underlying");
+    const error = createSdkError("NetworkError", "Network failed", { cause });
+    expect(error.cause).toBe(cause);
   });
 });
 
 describe("isRetryableSdkError", () => {
   it("returns true for retryable errors", () => {
-    // TODO: assert isRetryableSdkError(createSdkError("Timeout", "...")) === true
+    const error = createSdkError("Timeout", "Timeout");
+    expect(isRetryableSdkError(error)).toBe(true);
   });
 
   it("returns false for non-retryable errors", () => {
-    // TODO: assert isRetryableSdkError(createSdkError("InvalidConfig", "...")) === false
+    const error = createSdkError("InvalidConfig", "Bad config");
+    expect(isRetryableSdkError(error)).toBe(false);
   });
 
-  it("handles undefined retryable field with default false", () => {
-    // TODO: create error with retryable undefined, assert returns false
+  it("handles false retryable field", () => {
+    const error = createSdkError("Unknown", "Unknown", { retryable: false });
+    expect(isRetryableSdkError(error)).toBe(false);
   });
 });
