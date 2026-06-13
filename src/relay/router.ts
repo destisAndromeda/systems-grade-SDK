@@ -9,6 +9,7 @@ import type { PreparedTransaction } from "../tx/types.js";
 import type { RpcTransport } from "../rpc/types.js";
 import type { SendTransactionOptions } from "../tx/types.js";
 import type { Result } from "../core/result.js";
+import type { SdkError } from "../core/error.js";
 import { ok, err, isOk, isErr } from "../core/result.js";
 import { createSdkError, isKindOfSdkError } from "../core/error.js";
 import { sendTransactionViaRpc } from "../tx/send.js";
@@ -35,7 +36,7 @@ export async function routeTransaction(
   rpcTransport: RpcTransport,
   config: RelayRoutingConfig,
   options?: SendTransactionOptions,
-): Promise<Result<RoutedTransactionResult>> {
+): Promise<Result<RoutedTransactionResult, SdkError>> {
   // Case A: relay preferred and relay exists
   if (config.preferRelay && relay !== undefined) {
     try {
@@ -70,7 +71,7 @@ export async function routeTransaction(
           endpointId: rpcResult.value.endpointId,
         });
       } else {
-        return rpcResult as Result<RoutedTransactionResult>;
+        return rpcResult as Result<RoutedTransactionResult, SdkError>;
       }
     }
   }
@@ -85,7 +86,7 @@ export async function routeTransaction(
         endpointId: rpcResult.value.endpointId,
       });
     } else {
-      return rpcResult as Result<RoutedTransactionResult>;
+      return rpcResult as Result<RoutedTransactionResult, SdkError>;
     }
   }
 
@@ -100,7 +101,7 @@ export async function routeTransaction(
           endpointId: rpcResult.value.endpointId,
         });
       } else {
-        return rpcResult as Result<RoutedTransactionResult>;
+        return rpcResult as Result<RoutedTransactionResult, SdkError>;
       }
     } else {
       return err(

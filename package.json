@@ -15,7 +15,8 @@
     "example:basic": "tsx examples/basic.ts",
     "example:relay-fallback": "tsx examples/relay-fallback.ts",
     "example:wallet-adapter": "tsx examples/wallet-adapter.ts",
-    "example:demo": "tsx examples/judge-demo.ts"
+    "example:demo": "tsx examples/judge-demo.ts",
+    "example:devnet": "tsx examples/devnet-smoke.ts"
   },
   "dependencies": {
     "@solana-program/system": "^0.12.2",

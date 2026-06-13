@@ -227,8 +227,9 @@ describe("routeTransaction", () => {
       if (!isOk(prepared)) {
         throw new Error("Prepared transaction should be ok");
       }
+      const relayError = createSdkError("Unknown", "Some random error from relay");
       const relay = createFakeRelayClient({
-        error: new Error("Some random error from relay"),
+        error: relayError,
       });
       const rpc = createFakeRpcTransport({
         endpointUrl: "https://rpc.test",
@@ -245,7 +246,7 @@ describe("routeTransaction", () => {
       expect(isErr(result)).toBe(true);
       if (isErr(result)) {
         expect(result.error.kind).toBe("Unknown");
-        expect(result.error.message).toContain("Relay error:");
+        expect(result.error.message).toContain("Some random error");
       }
     });
   });
