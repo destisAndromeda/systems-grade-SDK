@@ -73,6 +73,8 @@ export {
   executeRpcAttempt,
   mapTransportErrorToSdkError,
 } from "./rpc/transport.js";
+export { createHttpRpcTransport } from "./rpc/http-transport.js";
+export type { HttpRpcTransportConfig } from "./rpc/http-transport.js";
 export { createResilientRpcClient, executeResilientRpcRequest } from "./rpc/resilient-client.js";
 
 // Transaction

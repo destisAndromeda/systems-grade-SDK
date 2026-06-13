@@ -20,6 +20,7 @@ import { createEndpointRegistry } from "../rpc/registry.js";
 import { createResilientRpcClient } from "../rpc/resilient-client.js";
 import { normalizeRpcEndpointConfig, createInitialEndpointState } from "../rpc/endpoint.js";
 import { createFakeRpcTransport } from "../testing/fake-transport.js";
+import { createHttpRpcTransport } from "../rpc/http-transport.js";
 import { buildPreparedTransaction, sendTransactionViaRpc } from "../tx/send.js";
 import { pollTransactionConfirmation } from "../tx/confirm.js";
 import { createStaticPriorityFeeProvider, createRpcPriorityFeeProvider, getPriorityFeeEstimate } from "../fee/priority-fee.js";
@@ -203,13 +204,13 @@ export function createSolanaReliabilitySdk(
   if (deps?.transports) {
     transports = deps.transports;
   } else {
-    // Create minimal transports (for testing, return NetworkError)
+    // Create HTTP transports for production use
     transports = new Map();
     for (const endpoint of registry.getAll()) {
-      const transport = createFakeRpcTransport({
+      const transport = createHttpRpcTransport({
         endpointUrl: endpoint.config.url,
         endpointId: endpoint.id,
-        responses: new Map(),
+        headers: endpoint.config.headers,
       });
       transports.set(endpoint.id, transport);
     }
