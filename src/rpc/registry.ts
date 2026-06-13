@@ -7,6 +7,7 @@
 
 import type { RpcEndpointConfig, RpcEndpointState, EndpointRegistry } from "./types.js";
 import type { Result } from "../core/result.js";
+import type { SdkError } from "../core/error.js";
 import { ok, err } from "../core/result.js";
 import { createSdkError } from "../core/error.js";
 import { normalizeRpcEndpointConfig, createInitialEndpointState } from "./endpoint.js";
@@ -19,7 +20,7 @@ import { normalizeRpcEndpointConfig, createInitialEndpointState } from "./endpoi
  */
 export function createEndpointRegistry(
   configs: (string | RpcEndpointConfig)[],
-): Result<EndpointRegistry> {
+): Result<EndpointRegistry, SdkError> {
   if (!configs || configs.length === 0) {
     return err(createSdkError("InvalidConfig", "At least one endpoint must be provided"));
   }
@@ -31,7 +32,7 @@ export function createEndpointRegistry(
   for (const config of configs) {
     const result = normalizeRpcEndpointConfig(config);
     if (!result.ok) {
-      return result as Result<EndpointRegistry>;
+      return result as Result<EndpointRegistry, SdkError>;
     }
 
     const normalized_config = result.value;

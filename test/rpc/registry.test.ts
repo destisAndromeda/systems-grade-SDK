@@ -41,10 +41,14 @@ describe("createEndpointRegistry", () => {
     if (isOk(result)) {
       const registry = result.value;
       const endpoints = registry.getAll();
-      expect(endpoints[0].successCount).toBe(0);
-      expect(endpoints[0].failureCount).toBe(0);
-      expect(endpoints[0].consecutiveFailures).toBe(0);
-      expect(endpoints[0].avgLatencyMs).toBe(0);
+      const firstEndpoint = endpoints[0];
+      expect(firstEndpoint).toBeDefined();
+      if (firstEndpoint) {
+        expect(firstEndpoint.successCount).toBe(0);
+        expect(firstEndpoint.failureCount).toBe(0);
+        expect(firstEndpoint.consecutiveFailures).toBe(0);
+        expect(firstEndpoint.avgLatencyMs).toBe(0);
+      }
     }
   });
 
@@ -54,10 +58,13 @@ describe("createEndpointRegistry", () => {
     if (isOk(result)) {
       const registry = result.value;
       const state = registry.getAll()[0];
-      const updated = { ...state, successCount: 5 };
-      registry.upsert(updated);
-      const retrieved = registry.getById(state.id);
-      expect(retrieved?.successCount).toBe(5);
+      expect(state).toBeDefined();
+      if (state) {
+        const updated = { ...state, successCount: 5 };
+        registry.upsert(updated);
+        const retrieved = registry.getById(state.id);
+        expect(retrieved?.successCount).toBe(5);
+      }
     }
   });
 });

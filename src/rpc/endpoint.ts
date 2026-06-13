@@ -16,7 +16,7 @@ import { createSdkError } from "../core/error.js";
  */
 export function normalizeRpcEndpointConfig(
   input: string | RpcEndpointConfig,
-): Result<RpcEndpointConfig> {
+): Result<RpcEndpointConfig, SdkError> {
   const config: RpcEndpointConfig = typeof input === "string" ? { url: input } : input;
 
   // Fill defaults

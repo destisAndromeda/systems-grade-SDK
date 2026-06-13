@@ -69,9 +69,9 @@ export function maybeCloseCircuit(
 ): RpcEndpointState {
   if (!isCircuitOpen(state, nowMs)) {
     // Circuit not open or has expired
+    const { circuitOpenUntil: _, ...rest } = state;
     return {
-      ...state,
-      circuitOpenUntil: undefined,
+      ...rest,
       consecutiveFailures: 0,
     };
   }

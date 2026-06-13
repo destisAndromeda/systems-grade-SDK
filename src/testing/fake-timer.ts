@@ -76,9 +76,14 @@ export function createFakeTimer(): FakeTimer {
       clock.advance(ms);
 
       // Execute callbacks whose dueAt time has passed
-      while (scheduled.length > 0 && scheduled[0].dueAt <= currentTime) {
-        const cb = scheduled.shift()!;
-        cb.fn();
+      while (scheduled.length > 0) {
+        const cb = scheduled[0];
+        if (cb && cb.dueAt <= currentTime) {
+          scheduled.shift();
+          cb.fn();
+        } else {
+          break;
+        }
       }
     },
   };

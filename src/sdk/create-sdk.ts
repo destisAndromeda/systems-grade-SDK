@@ -6,6 +6,7 @@
 
 import type { SolanaReliabilitySdkConfig, SolanaReliabilitySdk } from "./types.js";
 import type { Result } from "../core/result.js";
+import type { SdkError } from "../core/error.js";
 import { ok, err } from "../core/result.js";
 import { createSdkError } from "../core/error.js";
 
@@ -17,7 +18,7 @@ import { createSdkError } from "../core/error.js";
  * @param config SDK configuration
  * @returns Validation result
  */
-export function validateSdkConfig(config: SolanaReliabilitySdkConfig): Result<void> {
+export function validateSdkConfig(config: SolanaReliabilitySdkConfig): Result<void, SdkError> {
   // TODO: validate endpoints array, retry/circuit settings, etc.
   // return ok() if valid, err(InvalidConfig) otherwise
   throw new Error("TODO");
@@ -34,7 +35,7 @@ export function validateSdkConfig(config: SolanaReliabilitySdkConfig): Result<vo
  */
 export async function createSolanaReliabilitySdk(
   config: SolanaReliabilitySdkConfig,
-): Promise<Result<SolanaReliabilitySdk>> {
+): Promise<Result<SolanaReliabilitySdk, SdkError>> {
   // TODO: validate config, initialize components, return SDK facade or error
   throw new Error("TODO");
 }

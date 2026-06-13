@@ -7,6 +7,7 @@
 
 import type { RpcEndpointState, EndpointScoreConfig } from "./types.js";
 import type { Result } from "../core/result.js";
+import type { SdkError } from "../core/error.js";
 import { ok, err } from "../core/result.js";
 import { createSdkError } from "../core/error.js";
 
@@ -71,7 +72,7 @@ export function selectBestEndpoint(
   states: RpcEndpointState[],
   config: EndpointScoreConfig,
   nowMs: number,
-): Result<RpcEndpointState> {
+): Result<RpcEndpointState, SdkError> {
   // Filter out circuit-open endpoints
   const available = states.filter((state) => !isEndpointCircuitOpen(state, nowMs));
 
@@ -80,14 +81,22 @@ export function selectBestEndpoint(
   }
 
   // Score each available endpoint and select the best (lowest score)
-  let bestEndpoint = available[0];
+  const firstEndpoint = available[0];
+  if (!firstEndpoint) {
+    return err(createSdkError("AllEndpointsFailed", "All RPC endpoints are circuit-open"));
+  }
+
+  let bestEndpoint = firstEndpoint;
   let bestScore = scoreEndpoint(bestEndpoint, config, nowMs);
 
   for (let i = 1; i < available.length; i++) {
-    const score = scoreEndpoint(available[i], config, nowMs);
-    if (score < bestScore) {
-      bestScore = score;
-      bestEndpoint = available[i];
+    const endpoint = available[i];
+    if (endpoint) {
+      const score = scoreEndpoint(endpoint, config, nowMs);
+      if (score < bestScore) {
+        bestScore = score;
+        bestEndpoint = endpoint;
+      }
     }
   }
 
