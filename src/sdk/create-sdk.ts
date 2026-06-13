@@ -361,10 +361,14 @@ class SolanaReliabilitySdkImpl implements SolanaReliabilitySdk {
     try {
       // Merge config overrides
       const finalConfig: ConfirmationConfig = {
-        commitment: config?.commitment ?? this.confirmationConfig.commitment,
         pollIntervalMs: config?.pollIntervalMs ?? this.confirmationConfig.pollIntervalMs,
         timeoutMs: config?.timeoutMs ?? this.confirmationConfig.timeoutMs,
       };
+      if (config?.commitment !== undefined) {
+        finalConfig.commitment = config.commitment;
+      } else if (this.confirmationConfig.commitment !== undefined) {
+        finalConfig.commitment = this.confirmationConfig.commitment;
+      }
 
       // Poll for confirmation
       const pollResult = await pollTransactionConfirmation(this.rpc, signature, finalConfig, {
@@ -454,7 +458,7 @@ class SolanaReliabilitySdkImpl implements SolanaReliabilitySdk {
     }));
   }
 
-  getMetrics?(): MetricEvent[] {
+  getMetrics(): MetricEvent[] {
     if (typeof (this.metricsSink as any).getEvents === "function") {
       return (this.metricsSink as any).getEvents();
     }

@@ -42,7 +42,7 @@ export interface SolanaReliabilitySdkConfig {
   confirmation?: Partial<ConfirmationConfig>;
 
   // Priority fee
-  priorityFee?: PriorityFeeConfig;
+  priorityFee?: Partial<PriorityFeeConfig>;
 
   // Relay routing
   relay?: RelayClient;
@@ -129,9 +129,9 @@ export interface SolanaReliabilitySdk {
   }>;
 
   /**
-   * Get recorded metrics (if using in-memory sink).
+   * Get recorded metrics.
    *
-   * @returns Array of metric events or undefined if not available
+   * @returns Array of metric events (empty array if not available)
    */
-  getMetrics?(): MetricEvent[];
+  getMetrics(): MetricEvent[];
 }

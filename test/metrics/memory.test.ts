@@ -18,8 +18,8 @@ describe("createInMemoryMetricsSink", () => {
     const events = sink.getEvents();
     expect(events).toHaveLength(1);
     if (events.length > 0) {
-      expect(events[0].type).toBe("tx_send");
-      expect(events[0].timestampMs).toBe(now);
+      expect(events[0]!.type).toBe("tx_send");
+      expect(events[0]!.timestampMs).toBe(now);
     }
   });
 
@@ -34,9 +34,9 @@ describe("createInMemoryMetricsSink", () => {
     const events = sink.getEvents();
     expect(events).toHaveLength(3);
     if (events.length >= 3) {
-      expect(events[0].type).toBe("tx_send");
-      expect(events[1].type).toBe("tx_confirmed");
-      expect(events[2].type).toBe("fee_estimate");
+      expect(events[0]!.type).toBe("tx_send");
+      expect(events[1]!.type).toBe("tx_confirmed");
+      expect(events[2]!.type).toBe("fee_estimate");
     }
   });
 
@@ -79,7 +79,7 @@ describe("createInMemoryMetricsSink", () => {
     const events = sink.getEvents();
     expect(events).toHaveLength(1);
     if (events.length > 0) {
-      expect(events[0].attributes).toBeUndefined();
+      expect(events[0]!.attributes).toBeUndefined();
     }
   });
 
