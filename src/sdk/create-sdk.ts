@@ -210,7 +210,7 @@ export function createSolanaReliabilitySdk(
       const transport = createHttpRpcTransport({
         endpointUrl: endpoint.config.url,
         endpointId: endpoint.id,
-        headers: endpoint.config.headers,
+        ...(endpoint.config.headers ? { headers: endpoint.config.headers } : {}),
       });
       transports.set(endpoint.id, transport);
     }

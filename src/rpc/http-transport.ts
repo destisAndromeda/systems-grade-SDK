@@ -47,7 +47,7 @@ export function createHttpRpcTransport(config: HttpRpcTransportConfig): RpcTrans
           method: "POST",
           headers,
           body,
-          signal: controller?.signal,
+          signal: controller?.signal ?? null,
         });
 
         if (response.status === 429) {
