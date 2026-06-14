@@ -125,6 +125,12 @@ export type { MetricEventType, MetricEvent, MetricsSink } from "./metrics/types.
 export { createInMemoryMetricsSink } from "./metrics/memory.js";
 export type { OtelPayload } from "./metrics/otel.js";
 export { createOtelMetricsSink, mapMetricEventToOtelPayload } from "./metrics/otel.js";
+export type { DatadogMetricsSinkConfig, DatadogMetricsSinkDeps } from "./metrics/datadog.js";
+export {
+  createDatadogMetricsSink,
+  sendDatadogMetrics,
+  mapMetricEventToDatadogPayload,
+} from "./metrics/datadog.js";
 
 // Wallet
 export type {

@@ -8,6 +8,7 @@ import { createFakeRpcTransport } from "../../src/testing/fake-transport.js";
 import { buildPreparedTransaction } from "../../src/tx/send.js";
 import { isOk } from "../../src/core/result.js";
 import { isKindOfSdkError } from "../../src/core/error.js";
+import { createSolanaReliabilitySdk } from "../../src/sdk/create-sdk.js";
 
 describe("Wallet Standard Adapter", () => {
   const mockSolanaAccount = {
@@ -185,6 +186,94 @@ describe("Wallet Standard Adapter", () => {
     };
 
     expect(() => createWalletStandardTransactionWallet(mockOnlyEthWallet)).toThrow();
+  });
+
+  it("uses a Phantom-compatible Wallet Standard wallet through sdk.sendTransaction", async () => {
+    const endpointUrl = "https://api.test";
+    const endpointId = "https_api_test";
+    const fakeSignature = "wallet-standard-sdk-signature";
+
+    const signTransactionSpy = vi.fn().mockImplementation(async () => {
+      return [
+        {
+          signedTransaction: Buffer.from("signed-wallet-standard-tx"),
+        },
+      ];
+    });
+
+    const mockWallet = {
+      version: "1.0.0",
+      name: "Phantom",
+      chains: ["solana:mainnet"],
+      features: {
+        [SOLANA_SIGN_TRANSACTION]: {
+          version: "1.0.0",
+          signTransaction: signTransactionSpy,
+        },
+      },
+      accounts: [mockSolanaAccount],
+    };
+
+    const adapter = createWalletStandardTransactionWallet(mockWallet);
+
+    const fakeTransport = createFakeRpcTransport({
+      endpointUrl,
+      endpointId,
+      responses: new Map([
+        ["sendTransaction", { success: fakeSignature }],
+      ]),
+    });
+
+    const sdkResult = createSolanaReliabilitySdk(
+      {
+        endpoints: [endpointUrl],
+        wallet: adapter,
+        retry: { maxAttempts: 1 },
+      },
+      {
+        transports: new Map([[endpointId, fakeTransport]]),
+      },
+    );
+
+    expect(isOk(sdkResult)).toBe(true);
+    if (!isOk(sdkResult)) {
+      throw sdkResult.error;
+    }
+
+    const sdk = sdkResult.value;
+
+    const blockhash = "11111111111111111111111111111111";
+    const lastValidBlockHeight = 100;
+
+    const sendResult = await sdk.sendTransaction(
+      unsignedBase64,
+      blockhash,
+      lastValidBlockHeight,
+      {
+        skipPreflight: true,
+        maxRetries: 0,
+      }
+    );
+
+    expect(isOk(sendResult)).toBe(true);
+    if (isOk(sendResult)) {
+      expect(sendResult.value).toBe(fakeSignature);
+    }
+
+    expect(signTransactionSpy).toHaveBeenCalledTimes(1);
+    expect(fakeTransport.callCount("sendTransaction")).toBe(1);
+
+    const calls = fakeTransport.getCalls();
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.method).toBe("sendTransaction");
+
+    const params = calls[0]?.params as unknown[];
+    expect(params[0]).toBe(signedBase64);
+    expect(params[1]).toMatchObject({
+      encoding: "base64",
+      skipPreflight: true,
+      maxRetries: 0,
+    });
   });
 
   it("exports Wallet Standard adapter from public index", async () => {
