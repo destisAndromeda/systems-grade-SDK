@@ -6,6 +6,8 @@
 
 import { createSolanaReliabilitySdk } from "../sdk/create-sdk.js";
 import { isOk } from "../core/result.js";
+import { createFakeRpcTransport } from "../testing/fake-transport.js";
+import { createSdkError } from "../core/error.js";
 
 /**
  * Run reliability simulation.
@@ -20,10 +22,55 @@ export async function runSimulation(): Promise<string> {
 
   lines.push("=== Solana Reliability SDK Simulation ===\n");
 
-  // Create SDK with two endpoints (they'll both use fake transports)
-  const sdkResult = createSolanaReliabilitySdk({
-    endpoints: ["https://api.mainnet-beta.solana.com", "https://backup.rpc.solana.com"],
+  const primaryUrl = "https://primary.rpc.test";
+  const backupUrl = "https://backup.rpc.test";
+  const primaryId = "https_primary_rpc_test";
+  const backupId = "https_backup_rpc_test";
+
+  // Create fake transports
+  const primaryTransport = createFakeRpcTransport({
+    endpointUrl: primaryUrl,
+    endpointId: primaryId,
+    responses: new Map([
+      [
+        "sendTransaction",
+        {
+          error: createSdkError(
+            "NetworkError",
+            "simulated primary RPC failure",
+            { retryable: true },
+          ),
+        },
+      ],
+    ]),
   });
+
+  const backupTransport = createFakeRpcTransport({
+    endpointUrl: backupUrl,
+    endpointId: backupId,
+    responses: new Map([
+      ["sendTransaction", { success: "simulation-fallback-signature" }],
+    ]),
+  });
+
+  // Create SDK with two endpoints (they'll both use fake transports)
+  const sdkResult = createSolanaReliabilitySdk(
+    {
+      endpoints: [primaryUrl, backupUrl],
+      retry: {
+        maxAttempts: 2,
+        baseDelayMs: 0,
+        maxDelayMs: 0,
+        jitterRatio: 0,
+      },
+    },
+    {
+      transports: new Map([
+        [primaryId, primaryTransport],
+        [backupId, backupTransport],
+      ]),
+    },
+  );
 
   if (!isOk(sdkResult)) {
     return `Simulation failed: ${sdkResult.error.message}`;
@@ -32,8 +79,8 @@ export async function runSimulation(): Promise<string> {
   const sdk = sdkResult.value;
 
   lines.push("Step 1: Created SDK with 2 fake endpoints");
-  lines.push("  - Endpoint 1: https://api.mainnet-beta.solana.com");
-  lines.push("  - Endpoint 2: https://backup.rpc.solana.com\n");
+  lines.push(`  - Endpoint 1: ${primaryUrl}`);
+  lines.push(`  - Endpoint 2: ${backupUrl}\n`);
 
   // Send a fake transaction (will use fake transports)
   const fakeBase64 = Buffer.from("fake-tx").toString("base64");

@@ -14,6 +14,7 @@
 import {
   createSolanaReliabilitySdk,
   createFakeRpcTransport,
+  createSdkError,
   isOk,
   type RpcTransport,
 } from "../src/index.js";
@@ -44,21 +45,71 @@ export async function runJudgeDemo(): Promise<string> {
   output.push("STEP 1: Create SDK with fallback endpoints");
   output.push("─────────────────────────────────────────");
 
-  const sdkResult = createSolanaReliabilitySdk({
-    endpoints: [
-      "https://api.mainnet-beta.solana.com",  // Primary (flaky in demo)
-      "https://backup.rpc.solana.com",        // Secondary (stable)
-    ],
-    retry: {
-      maxAttempts: 3,
-      baseDelayMs: 100,
-      maxDelayMs: 1000,
-    },
-    circuitBreaker: {
-      failureThreshold: 3,
-      cooldownMs: 10000,
-    },
+  const primaryUrl = "https://api.mainnet-beta.solana.com";
+  const backupUrl = "https://backup.rpc.solana.com";
+  const primaryId = "https_api_mainnet_beta_solana_com";
+  const backupId = "https_backup_rpc_solana_com";
+
+  const primaryTransport = createFakeRpcTransport({
+    endpointUrl: primaryUrl,
+    endpointId: primaryId,
+    responses: new Map([
+      [
+        "sendTransaction",
+        {
+          error: createSdkError(
+            "NetworkError",
+            "simulated primary RPC failure",
+            { retryable: true },
+          ),
+        },
+      ],
+    ]),
   });
+
+  const backupTransport = createFakeRpcTransport({
+    endpointUrl: backupUrl,
+    endpointId: backupId,
+    responses: new Map([
+      ["sendTransaction", { success: "demo-fallback-signature" }],
+      [
+        "getSignatureStatuses",
+        {
+          success: {
+            value: [
+              {
+                confirmationStatus: "confirmed",
+                slot: 123456789,
+                err: null,
+              },
+            ],
+          },
+        },
+      ],
+    ]),
+  });
+
+  const sdkResult = createSolanaReliabilitySdk(
+    {
+      endpoints: [primaryUrl, backupUrl],
+      retry: {
+        maxAttempts: 3,
+        baseDelayMs: 0,
+        maxDelayMs: 0,
+        jitterRatio: 0,
+      },
+      circuitBreaker: {
+        failureThreshold: 3,
+        cooldownMs: 10000,
+      },
+    },
+    {
+      transports: new Map([
+        [primaryId, primaryTransport],
+        [backupId, backupTransport],
+      ]),
+    },
+  );
 
   if (!isOk(sdkResult)) {
     output.push(`✗ Failed: ${sdkResult.error.message}`);
