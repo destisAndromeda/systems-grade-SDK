@@ -159,5 +159,16 @@ export { createFakeRelayClient } from "./testing/fake-relay.js";
 export { simulateNetworkBehavior } from "./testing/network-simulator.js";
 
 // CLI
-export { formatEndpointHealth, createHealthReport } from "./cli/health.js";
+export {
+  formatEndpointHealth,
+  createHealthReport,
+  createActiveHealthReport,
+  watchHealth,
+} from "./cli/health.js";
+export type { HealthProbeOptions, HealthWatchOptions } from "./cli/health.js";
 export { runSimulation } from "./cli/simulate.js";
+export {
+  formatTransactionStatus,
+  createTransactionStatusReport,
+} from "./cli/status.js";
+export type { StatusCommandOptions } from "./cli/status.js";
