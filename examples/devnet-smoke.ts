@@ -2,17 +2,121 @@
  * Devnet smoke-test example.
  *
  * Tests the SDK against real Solana devnet endpoints:
- * - Generates a keypair
- * - Requests airdrop
+ * - Loads or generates a keypair
+ * - Requests airdrop (optional, skipped for funded keypairs)
  * - Confirms airdrop transaction
  * - Checks balance
  * - Reports endpoint health
+ *
+ * Supports environment variables:
+ * - SOLANA_DEVNET_RPC_URL: Custom RPC endpoint (default: https://api.devnet.solana.com)
+ * - SOLANA_DEVNET_KEYPAIR: Path to funded Solana CLI keypair JSON file
+ *
+ * Usage:
+ * - Public faucet path (may be rate-limited):
+ *   npm run example:devnet
+ *
+ * - With funded keypair (reliable):
+ *   SOLANA_DEVNET_KEYPAIR="$HOME/.config/solana/id.json" npm run example:devnet
+ *
+ * - Custom RPC endpoint:
+ *   SOLANA_DEVNET_RPC_URL="https://your-devnet-rpc.example.com" npm run example:devnet
+ *
+ * Note:
+ * - Public devnet faucet often returns HTTP 429 (rate-limited). This is expected.
+ * - For reliable smoke tests, use a funded keypair via SOLANA_DEVNET_KEYPAIR.
+ * - Never commit keypair files or API keys to source control.
  *
  * Run: npm run example:devnet
  */
 
 import { createSolanaReliabilitySdk, isOk } from "../src/index.js";
-import { generateKeyPairSigner } from "@solana/kit";
+import {
+  generateKeyPairSigner,
+  createKeyPairSignerFromBytes,
+} from "@solana/kit";
+import { readFile } from "fs/promises";
+
+/**
+ * Get a sanitized display string for a URL (hides API keys and secrets)
+ */
+function getSanitizedUrlDisplay(url: string): string {
+  try {
+    const urlObj = new URL(url);
+    return urlObj.origin;
+  } catch {
+    // If it's not a valid URL, just return a generic message
+    return "custom endpoint from SOLANA_DEVNET_RPC_URL";
+  }
+}
+
+/**
+ * Load a keypair from a Solana CLI keypair JSON file
+ */
+async function loadKeypairFromFile(filePath: string) {
+  const normalizedPath = filePath.startsWith("~")
+    ? filePath.replace("~", process.env.HOME || "")
+    : filePath;
+
+  try {
+    const fileContent = await readFile(normalizedPath, "utf-8");
+    const keypairArray: number[] = JSON.parse(fileContent);
+
+    if (!Array.isArray(keypairArray) || keypairArray.length !== 64) {
+      throw new Error(
+        `Invalid keypair file format. Expected 64-byte array, got ${keypairArray.length} bytes.`
+      );
+    }
+
+    const keypairBytes = new Uint8Array(keypairArray);
+    const signer = await createKeyPairSignerFromBytes(keypairBytes);
+    return signer;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      throw new Error(`Keypair file not found: ${normalizedPath}`);
+    }
+    throw error;
+  }
+}
+
+/**
+ * Determine if we should skip airdrop (true if keypair is funded, false if generated)
+ */
+function shouldSkipAirdrop(isFundedKeypair: boolean): boolean {
+  return isFundedKeypair;
+}
+
+/**
+ * Unwrap lamports value from various response formats
+ */
+function unwrapLamportsValue(input: unknown): bigint {
+  // Handle raw bigint
+  if (typeof input === "bigint") {
+    return input;
+  }
+
+  // Handle raw number
+  if (typeof input === "number") {
+    return BigInt(input);
+  }
+
+  // Handle string numeric value
+  if (typeof input === "string") {
+    return BigInt(input);
+  }
+
+  // Handle { value: ... } wrapped format (Solana RPC standard)
+  if (typeof input === "object" && input !== null) {
+    const obj = input as Record<string, unknown>;
+    if ("value" in obj) {
+      return unwrapLamportsValue(obj.value);
+    }
+  }
+
+  throw new Error(
+    `Unable to extract lamports value from response: ${String(input)}`
+  );
+}
 
 async function main() {
   try {
@@ -20,11 +124,15 @@ async function main() {
 
     // Step 1: Create SDK with devnet endpoints
     console.log("Step 1: Creating SDK with devnet endpoints...");
+
+    // Use public devnet endpoint by default, allow override via env var
+    const devnetRpcUrl =
+      process.env.SOLANA_DEVNET_RPC_URL ?? "https://api.devnet.solana.com";
+    const sanitizedUrl = getSanitizedUrlDisplay(devnetRpcUrl);
+    console.log(`  Using endpoint: ${sanitizedUrl}`);
+
     const sdkResult = createSolanaReliabilitySdk({
-      endpoints: [
-        "https://api.devnet.solana.com",
-        "https://devnet.helius-rpc.com/?api-key=demo",
-      ],
+      endpoints: [devnetRpcUrl],
       retry: {
         maxAttempts: 3,
       },
@@ -41,39 +149,85 @@ async function main() {
     const sdk = sdkResult.value;
     console.log("✓ SDK created successfully\n");
 
-    // Step 2: Generate a fresh keypair
-    console.log("Step 2: Generating keypair...");
-    const signer = await generateKeyPairSigner();
-    
-    // Convert signer to public key string (base58 address)
-    // @solana/kit signers stringify to their public key
-    const publicKeyString = `${signer}`;
-    console.log(`✓ Keypair generated`);
-    console.log(`  Public Key: ${publicKeyString.substring(0, 20)}...\n`);
+    // Step 2: Load or generate keypair
+    console.log("Step 2: Loading or generating keypair...");
 
-    // Step 3: Request airdrop
-    console.log("Step 3: Requesting airdrop (0.1 SOL)...");
-    let airdropSignature: string | undefined;
+    let signer;
+    let isFundedKeypair = false;
 
-    try {
-      // Request airdrop: 100_000_000 lamports = 0.1 SOL
-      // The RPC method expects a public key as a string in base58 format
-      const airdropResult = await sdk.rpc.send<
-        [string, number],
-        string
-      >("requestAirdrop", [publicKeyString, 100_000_000]);
-
-      airdropSignature = airdropResult;
-      console.log(`✓ Airdrop requested`);
-      console.log(`  Signature: ${airdropSignature}\n`);
-    } catch (error) {
-      console.error(`✗ Airdrop failed: ${String(error)}`);
-      process.exit(1);
+    if (process.env.SOLANA_DEVNET_KEYPAIR) {
+      try {
+        signer = await loadKeypairFromFile(process.env.SOLANA_DEVNET_KEYPAIR);
+        isFundedKeypair = true;
+        console.log(`✓ Keypair loaded from SOLANA_DEVNET_KEYPAIR`);
+      } catch (error) {
+        console.error(
+          `✗ Failed to load keypair from SOLANA_DEVNET_KEYPAIR: ${String(error)}`
+        );
+        process.exit(1);
+      }
+    } else {
+      // Generate a temporary keypair for public faucet test
+      signer = await generateKeyPairSigner();
+      isFundedKeypair = false;
+      console.log(`✓ Temporary keypair generated`);
     }
 
-    // Step 4: Confirm airdrop
-    console.log("Step 4: Confirming airdrop transaction...");
-    if (airdropSignature) {
+    const publicKeyString = String(signer.address);
+    console.log(`  Public Key: ${publicKeyString.substring(0, 20)}...\n`);
+
+    // Step 3: Request airdrop (skip if using funded keypair)
+    console.log("Step 3: Requesting airdrop (0.1 SOL)...");
+    let airdropSignature: string | undefined;
+    let airdropSkipped = false;
+
+    if (shouldSkipAirdrop(isFundedKeypair)) {
+      console.log(`✓ Skipped airdrop (using funded keypair)\n`);
+      airdropSkipped = true;
+    } else {
+      try {
+        // Request airdrop: 100_000_000 lamports = 0.1 SOL
+        // The RPC method expects a public key as a string in base58 format
+        const airdropResult = await sdk.rpc.send<
+          [string, number],
+          string
+        >("requestAirdrop", [publicKeyString, 100_000_000]);
+
+        airdropSignature = airdropResult;
+        console.log(`✓ Airdrop requested`);
+        console.log(`  Signature: ${airdropSignature}\n`);
+      } catch (error) {
+        const errorStr = String(error);
+        console.error(`✗ Airdrop failed: ${errorStr}`);
+
+        // Handle 429 rate limit gracefully with helpful guidance
+        if (
+          errorStr.includes("rate limit") ||
+          errorStr.includes("faucet") ||
+          errorStr.includes("429")
+        ) {
+          console.error(
+            "\nDevnet faucet is rate-limited. Set SOLANA_DEVNET_KEYPAIR to a funded devnet keypair JSON file, or use SOLANA_DEVNET_RPC_URL with a provider that supports devnet airdrops.\n"
+          );
+          // Exit gracefully with helpful message (not an unhandled error)
+          process.exit(0);
+        }
+
+        // For other errors (401, etc), provide auth-specific guidance
+        if (errorStr.includes("401") || errorStr.includes("Unauthorized")) {
+          console.error(
+            "RPC endpoint rejected the request. Set SOLANA_DEVNET_RPC_URL to a valid devnet RPC endpoint or use https://api.devnet.solana.com."
+          );
+        }
+
+        // Exit on other airdrop errors
+        process.exit(1);
+      }
+    }
+
+    // Step 4: Confirm airdrop (skip if airdrop was skipped)
+    if (!airdropSkipped && airdropSignature) {
+      console.log("Step 4: Confirming airdrop transaction...");
       try {
         const confirmResult = await sdk.confirmTransaction(airdropSignature);
 
@@ -96,14 +250,14 @@ async function main() {
     try {
       const balanceResult = await sdk.rpc.send<
         [string],
-        number
+        { value: number }
       >("getBalance", [publicKeyString]);
 
-      const balanceLamports = balanceResult;
-      const balanceSol = balanceLamports / 1_000_000_000;
+      const balanceLamports = unwrapLamportsValue(balanceResult);
+      const balanceSol = Number(balanceLamports) / 1_000_000_000;
       console.log(`✓ Balance retrieved`);
       console.log(`  Lamports: ${balanceLamports}`);
-      console.log(`  SOL: ${balanceSol.toFixed(4)}\n`);
+      console.log(`  SOL: ${balanceSol.toFixed(9)}\n`);
     } catch (error) {
       console.error(`✗ Balance error: ${String(error)}`);
       process.exit(1);

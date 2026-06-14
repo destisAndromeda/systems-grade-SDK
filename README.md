@@ -47,21 +47,29 @@ This SDK provides resilient RPC client behavior, transaction send/confirm helper
 ## Installation & development setup
 
 ```bash
+# Install dependencies and build
 npm install
 npm run typecheck
-npm test
 npm run coverage
 npm run build
+
+# Run deterministic offline test suite
+npm test
 ```
 
-Available example scripts:
+**Example scripts (deterministic; no live RPC required):**
 
 ```bash
 npm run example:basic           # Basic SDK usage
 npm run example:relay-fallback  # Relay routing with RPC fallback
 npm run example:wallet-adapter  # Wallet Standard integration
 npm run example:demo            # Judge demo (MVP showcase)
-npm run example:devnet          # Devnet smoke test
+```
+
+**Live devnet smoke test (optional; requires live RPC + faucet):**
+
+```bash
+npm run example:devnet          # See "Devnet smoke test" section below
 ```
 
 CLI command:
@@ -175,9 +183,11 @@ The SDK handles the rest: retry, failover, confirmation polling, and metrics.
 
 ```typescript
 import {
+  appendTransactionMessageInstruction,
   createTransactionMessage,
   generateKeyPairSigner,
   getBase64EncodedWireTransaction,
+  lamports,
   pipe,
   setTransactionMessageFeePayerSigner,
   setTransactionMessageLifetimeUsingBlockhash,
@@ -452,6 +462,46 @@ const sdkResult = createSolanaReliabilitySdk(
 | Network simulation | [`test/integration/rate-limit-circuit-breaker.test.ts`](test/integration/rate-limit-circuit-breaker.test.ts), [`test/testing/network-simulator.test.ts`](test/testing/network-simulator.test.ts) |
 | Transaction confirmation timeout | [`test/integration/tx-confirmation-timeout.test.ts`](test/integration/tx-confirmation-timeout.test.ts) |
 
+## Devnet smoke test
+
+The SDK includes an **optional live-network smoke test** that runs against a real Solana devnet RPC endpoint. This is separate from the deterministic offline test suite.
+
+### Usage
+
+```bash
+# Quick test with public endpoint (may hit faucet rate limits)
+npm run example:devnet
+
+# Reliable test with funded keypair
+SOLANA_DEVNET_KEYPAIR="$HOME/.config/solana/id.json" npm run example:devnet
+
+# Custom devnet RPC endpoint (e.g., Triton, local validator)
+SOLANA_DEVNET_RPC_URL="https://your-devnet-rpc.example.com" \
+SOLANA_DEVNET_KEYPAIR="$HOME/.config/solana/id.json" \
+npm run example:devnet
+```
+
+### Environment variables
+
+- **`SOLANA_DEVNET_RPC_URL`**: Custom RPC endpoint (default: `https://api.devnet.solana.com`). Must be a valid devnet endpoint.
+- **`SOLANA_DEVNET_KEYPAIR`**: Path to Solana CLI keypair JSON file (e.g., `~/.config/solana/id.json`). If set, skips airdrop and uses the funded keypair.
+
+### What the example verifies
+
+- ✓ SDK creation with real devnet RPC endpoint
+- ✓ Keypair generation (`@solana/kit`) or loading from file
+- ✓ Optional airdrop for generated keypairs
+- ✓ RPC balance query and response unwrapping
+- ✓ Endpoint health monitoring (successes, failures, latency, circuit breaker state)
+- ✓ No secrets printed to console
+
+### Notes
+
+- **Deterministic test suite** (`npm test`) is 100% offline and uses fake transports.
+- **Live smoke test** (`npm run example:devnet`) depends on network/RPC/faucet availability; not required for CI.
+- Public devnet faucet may return `HTTP 429 Too Many Requests`. Use a funded keypair for reliable tests.
+- Never commit keypair files, API keys, or provider URLs containing secrets to source control.
+
 ## Coverage
 
 ```
@@ -468,173 +518,86 @@ The project is above 90% coverage for statements and lines. Tests include determ
 
 ### Core result/error handling
 
-```typescript
-export type Result<T, E> = { ok: true; value: T } | { ok: false; error: E };
-
-export function isOk<T, E>(result: Result<T, E>): result is { ok: true; value: T };
-export function isErr<T, E>(result: Result<T, E>): result is { ok: false; error: E };
-export function ok<T>(value: T): Result<T, never>;
-export function err<E>(error: E): Result<never, E>;
-export function mapResult<T, E, U>(result: Result<T, E>, fn: (value: T) => U): Result<U, E>;
-export function unwrapResult<T, E>(result: Result<T, E>): T;
-
-export type SdkError = { kind: string; message: string; cause?: any };
-export function createSdkError(kind: string, message: string, cause?: any): SdkError;
-export function isKindOfSdkError(error: any, kind: string): boolean;
-export function isRetryableSdkError(error: SdkError): boolean;
-```
+- `Result<T, E>` – Discriminated union representing success or failure.
+- `ok(value)` – Construct a successful `Result`.
+- `err(error)` – Construct a failed `Result`.
+- `isOk(result)` – Type guard for successful `Result`.
+- `isErr(result)` – Type guard for failed `Result`.
+- `mapResult(result, fn)` – Map a successful `Result`'s value.
+- `unwrapResult(result)` – Unwrap a `Result` value or throw the error.
+- `createSdkError(kind, message, opts)` – Create a standardized `SdkError`.
+- `isKindOfSdkError(value)` – Check if a value is an `SdkError`.
+- `isRetryableSdkError(error)` – Check if an error can be safely retried.
+- `mapToSdkError(error, defaultKind)` – Normalizes an unknown error to `SdkError`.
 
 ### RPC reliability
 
-```typescript
-export interface RpcEndpointConfig {
-  url: string;
-  id?: string; // Auto-derived if omitted
-}
-
-export interface EndpointRegistry {
-  getEndpoint(id: string): RpcEndpointConfig | undefined;
-  getAllEndpoints(): RpcEndpointConfig[];
-  getState(id: string): RpcEndpointState | undefined;
-  getAllStates(): RpcEndpointState[];
-}
-
-export function createEndpointRegistry(configs: RpcEndpointConfig[]): Result<EndpointRegistry, SdkError>;
-export function selectBestEndpoint(states: RpcEndpointState[]): RpcEndpointState | undefined;
-export function createHttpRpcTransport(config: HttpRpcTransportConfig): RpcTransport;
-export function createResilientRpcClient(config: ResilientRpcConfig): ResilientRpcClient;
-export function executeResilientRpcRequest(client: ResilientRpcClient, ...): Promise<Result<any, SdkError>>;
-```
+- `createEndpointRegistry(configs)` – Initialize an in-memory endpoint registry.
+- `selectBestEndpoint(states, scoring, nowMs)` – Choose the healthiest endpoint based on metrics.
+- `createHttpRpcTransport(config)` – Create a standard JSON-RPC HTTP transport.
+- `createResilientRpcClient(transports, config, deps)` – Create a resilient RPC client wrapping multiple endpoints.
+- `executeResilientRpcRequest(method, params, transports, config, deps)` – Execute an RPC request with failover and retry logic.
 
 ### Transactions
 
-```typescript
-export interface PreparedTransaction {
-  base64: string;
-  blockhash: string;
-  lastValidBlockHeight: number;
-}
-
-export function buildPreparedTransaction(base64: string, blockhash: string, lastValidBlockHeight: number): Result<PreparedTransaction, SdkError>;
-export function sendTransactionViaRpc(rpc: RpcTransport, ...): Promise<Result<string, SdkError>>;
-export function sendTransactionWithResilience(client: ResilientRpcClient, ...): Promise<Result<string, SdkError>>;
-export function pollTransactionConfirmation(rpc: RpcTransport, signature: string, config: ConfirmationConfig): Promise<Result<PollTransactionConfirmationResult, SdkError>>;
-export function fetchTransactionStatus(rpc: RpcTransport, signature: string): Promise<Result<TransactionConfirmationStatus, SdkError>>;
-```
+- `buildPreparedTransaction(base64, blockhash, lastValidBlockHeight)` – Build and validate a prepared transaction.
+- `isBlockhashExpired(prepared, currentBlockHeight)` – Check if a blockhash has expired.
+- `simulateTransaction(transport, prepared)` – Simulate a transaction on the network.
+- `sendTransactionViaRpc(transport, prepared, options)` – Send a transaction via standard RPC.
+- `sendTransactionWithResilience(transport, prepared, options)` – Send a transaction with retry and failover.
+- `fetchTransactionStatus(transport, signature)` – Retrieve current status of a transaction.
+- `pollTransactionConfirmation(transport, signature, config, deps)` – Poll for transaction status until terminal.
 
 ### Relay / Jito
 
-```typescript
-export interface RelayClient {
-  readonly name: string;
-  sendTransaction(base64: string): Promise<RelaySendResult>;
-}
-
-export interface RoutedTransactionResult {
-  signature: string;
-  route: "relay" | "rpc";
-  endpointId?: string;
-  relayName?: string;
-}
-
-export function createJitoRelayClient(transport: RpcTransport, config: { name: string }): RelayClient;
-export function routeTransaction(relay: RelayClient, rpc: RpcTransport, base64: string, ...): Promise<Result<RoutedTransactionResult, SdkError>>;
-```
+- `createJitoRelayClient(transport, options)` – Initialize a Jito relay client.
+- `routeTransaction(prepared, relay, rpcTransport, config, options)` – Route a transaction via relay with RPC fallback.
 
 ### Fees
 
-```typescript
-export interface PriorityFeeEstimate {
-  microlamports: number;
-  staleness?: { staleMs: number; maxStaleMs: number };
-}
-
-export interface PriorityFeeProvider {
-  getEstimate(): Promise<Result<PriorityFeeEstimate, SdkError>>;
-}
-
-export function createStaticPriorityFeeProvider(microlamports: number): PriorityFeeProvider;
-export function createRpcPriorityFeeProvider(rpc: RpcTransport, config: { maxStaleMs: number }): PriorityFeeProvider;
-export function getPriorityFeeEstimate(provider: PriorityFeeProvider): Promise<Result<number, SdkError>>;
-export function isPriorityFeeStale(estimate: PriorityFeeEstimate): boolean;
-```
+- `createStaticPriorityFeeProvider(microLamports, clock)` – Fixed fee provider.
+- `createRpcPriorityFeeProvider(transport, clock)` – RPC-based priority fee provider.
+- `isPriorityFeeStale(estimate, nowMs, maxStaleMs)` – Check if a fee estimate is stale.
+- `getPriorityFeeEstimate(providers, config, clock)` – Fetch fee estimate from providers, falling back if needed.
 
 ### Metrics
 
-```typescript
-export type MetricEventType = "rpc_attempt" | "relay_attempt" | "transaction_sent" | "transaction_confirmed";
-
-export interface MetricEvent {
-  type: MetricEventType;
-  timestampMs: number;
-  attributes: Record<string, any>;
-}
-
-export interface MetricsSink {
-  recordEvent(event: MetricEvent): void;
-}
-
-export function createInMemoryMetricsSink(): MetricsSink & { getEvents(): MetricEvent[] };
-export function createDatadogMetricsSink(config: DatadogMetricsSinkConfig): MetricsSink;
-export function createOtelMetricsSink(): MetricsSink & { getEvents(): OtelPayload[] };
-export function mapMetricEventToDatadogPayload(event: MetricEvent): any;
-export function mapMetricEventToOtelPayload(event: MetricEvent): OtelPayload;
-```
+- `createInMemoryMetricsSink()` – Collect metric events in memory.
+- `createOtelMetricsSink(onSend)` – Create an OpenTelemetry-compatible metrics sink.
+- `createDatadogMetricsSink(config, deps)` – Create a Datadog HTTP metrics sink.
+- `mapMetricEventToDatadogPayload(event, config, nowMs)` – Map metric event to Datadog payload.
+- `mapMetricEventToOtelPayload(event)` – Map metric event to OpenTelemetry payload.
+- `sendDatadogMetrics(payload, config, deps)` – Send metric payload directly to Datadog HTTP endpoint.
 
 ### Wallets
 
-```typescript
-export interface TransactionWallet {
-  publicKey?: string;
-  signTransaction(base64: string): Promise<WalletSignResult>;
-}
-
-export function createWalletStandardTransactionWallet(wallet: WalletStandardWalletLike): TransactionWallet;
-export function signTransactionWithWallet(wallet: TransactionWallet, base64: string): Promise<Result<WalletSignResult, SdkError>>;
-export function sendViaWallet(wallet: TransactionWallet, rpc: RpcTransport, ...): Promise<Result<WalletSendResult, SdkError>>;
-
-export const SOLANA_SIGN_TRANSACTION = "solana:signTransaction";
-export const SOLANA_SIGN_AND_SEND_TRANSACTION = "solana:signAndSendTransaction";
-```
+- `createWalletStandardTransactionWallet(wallet)` – Adapt standard-compliant wallets for signing.
+- `signTransactionWithWallet(wallet, base64)` – Sign a transaction using a wallet.
+- `sendViaWallet(wallet, transport, prepared, options)` – Sign with wallet and send via resilient RPC.
 
 ### SDK facade
 
-```typescript
-export interface SolanaReliabilitySdk {
-  rpc: RpcTransport;
-  sendTransaction(base64: string, blockhash: string, lastValidBlockHeight: number, options?: SendTransactionOptions): Promise<Result<string, SdkError>>;
-  confirmTransaction(signature: string): Promise<Result<PollTransactionConfirmationResult, SdkError>>;
-  getPriorityFee(): Promise<Result<number, SdkError>>;
-  getEndpointHealth(): EndpointHealth[];
-  recordMetric(event: MetricEvent): void;
-}
-
-export function createSolanaReliabilitySdk(config: SolanaReliabilitySdkConfig, deps?: SdkDeps): Result<SolanaReliabilitySdk, SdkError>;
-export function validateSdkConfig(config: SolanaReliabilitySdkConfig): Result<void, SdkError>;
-```
+- `createSolanaReliabilitySdk(config, deps)` – Initialize the main SDK interface.
+- `validateSdkConfig(config)` – Validate configuration parameters.
 
 ### Testing utilities
 
-```typescript
-export function createFakeClock(): Clock;
-export function createFakeTimer(): Timer;
-export function createFakeRandom(): RandomSource;
-export function createFakeRpcTransport(config: { endpointUrl: string; endpointId: string; responses: Map<string, any> }): RpcTransport & { callCount(method: string): number; getCalls(): any[] };
-export function createFakeRelayClient(): RelayClient;
-export function simulateNetworkBehavior(transport: RpcTransport, config: { latencyMs?: number; dropRate?: number; errorRate?: number }): RpcTransport;
-```
+- `createFakeClock(startMs)` – Deterministic clock for tests.
+- `createFakeTimer()` – Deterministic timer for tests.
+- `createFakeRandom()` – Deterministic random source for tests.
+- `createFakeRpcTransport(config)` – Mock RPC transport with error/response configuration.
+- `simulateNetworkBehavior(transport, config, deps)` – Inject latency/drops/errors into transport.
+- `createFakeRelayClient(config)` – Mock relay client.
 
 ### CLI helpers
 
-```typescript
-export function formatEndpointHealth(health: EndpointHealth[]): string;
-export function createHealthReport(endpoints: string[]): Promise<Result<string, SdkError>>;
-export function createActiveHealthReport(endpoints: string[], options: HealthProbeOptions): Promise<Result<string, SdkError>>;
-export function watchHealth(endpoints: string[], options: HealthWatchOptions): Promise<Result<string, SdkError>>;
-export function runSimulation(): Promise<string>;
-export function formatTransactionStatus(signature: string, status: Result<TransactionConfirmationStatus, SdkError>): string;
-export function createTransactionStatusReport(signature: string, endpoint: string): Promise<Result<string, SdkError>>;
-```
+- `createActiveHealthReport(...)` – Active RPC health probe.
+- `watchHealth(...)` – Polling RPC health monitor.
+- `createTransactionStatusReport(...)` – Transaction status lookup.
+- `formatEndpointHealth(health)` – Format endpoint health statistics for display.
+- `createHealthReport(endpoints)` – Create a basic health report for endpoints.
+- `runSimulation()` – Run offline reliability simulation.
+- `formatTransactionStatus(signature, status)` – Format transaction status for output.
 
 ## Design principles
 
