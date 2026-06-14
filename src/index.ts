@@ -133,6 +133,12 @@ export type {
   WalletSendResult,
 } from "./wallet/types.js";
 export { signTransactionWithWallet, sendViaWallet } from "./wallet/adapter.js";
+export type { WalletStandardWalletLike, WalletStandardAccountLike } from "./wallet/standard-wallet.js";
+export {
+  createWalletStandardTransactionWallet,
+  SOLANA_SIGN_TRANSACTION,
+  SOLANA_SIGN_AND_SEND_TRANSACTION,
+} from "./wallet/standard-wallet.js";
 
 // SDK
 export type { SolanaReliabilitySdkConfig, SolanaReliabilitySdk } from "./sdk/types.js";
