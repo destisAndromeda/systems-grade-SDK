@@ -364,6 +364,24 @@ export async function sendWithPreflightGuard(
   options?: SendWithPreflightGuardOptions,
 ): Promise<Result<string, SdkError>> {
   try {
+    // If user explicitly requests to skip all preflight checks
+    if (options?.skipPreflight === true) {
+      const response = await transport.send<
+        unknown[],
+        string | { result?: string; signature?: string }
+      >("sendTransaction", [
+        base64,
+        {
+          encoding: "base64",
+          maxRetries: 0,
+          skipPreflight: true,
+        },
+      ]);
+
+      return parseSignatureResponse(response);
+    }
+
+    // Default: run simulation first for safety
     if (options?.skipSimulation !== true) {
       // Run simulation first
       const simResponse = await transport.send<

@@ -11,17 +11,27 @@ import { createInMemoryMetricsSink } from "../../src/metrics/memory.js";
 import { createOtelMetricsSink } from "../../src/metrics/otel.js";
 import { isOk, isErr } from "../../src/core/result.js";
 
+// Helper: compute endpoint ID from URL (matching SDK's createEndpointId logic)
+function createEndpointId(url: string): string {
+  const normalized = url.replace(/\/$/, "").toLowerCase();
+  return normalized
+    .replace(/[^a-z0-9]/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_|_$/g, "");
+}
+
 describe("SDK Metrics Export", () => {
   it("records metric when SDK sends transaction successfully", async () => {
     const metricsSink = createInMemoryMetricsSink();
     const endpoint = "https://api.test";
-    const endpointId = "https_api_test"; // Matches generated ID from endpoint
+    const endpointId = createEndpointId(endpoint);
 
     // Create fake transport with sendTransaction response
     const fakeTransport = createFakeRpcTransport({
       endpointUrl: endpoint,
       endpointId,
       responses: new Map([
+        ["simulateTransaction", { success: { value: { logs: [], err: null } } }],
         ["sendTransaction", { success: "test-signature-123" }],
       ]),
     });
@@ -59,7 +69,7 @@ describe("SDK Metrics Export", () => {
   it("records metric when SDK confirms transaction successfully", async () => {
     const metricsSink = createInMemoryMetricsSink();
     const endpoint = "https://api.test";
-    const endpointId = "https_api_test"; // Matches generated ID from endpoint
+    const endpointId = createEndpointId(endpoint);
 
     // Create fake transport with getSignatureStatuses response
     const fakeTransport = createFakeRpcTransport({

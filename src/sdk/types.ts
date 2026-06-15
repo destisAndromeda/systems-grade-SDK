@@ -96,6 +96,7 @@ export interface SolanaReliabilitySdk {
    * Confirm a transaction with polling.
    *
    * Polls for confirmation status until timeout or terminal state.
+   * Uses rebroadcast path if transaction was tracked by sendTransaction.
    *
    * @param signature Transaction signature
    * @param config Optional confirmation config overrides
@@ -105,6 +106,25 @@ export interface SolanaReliabilitySdk {
     signature: string,
     config?: Partial<ConfirmationConfig>,
   ): Promise<Result<{ confirmed: boolean; slot?: number }, SdkError>>;
+
+  /**
+   * Send and confirm a transaction in one call.
+   *
+   * Uses the advanced transaction lifecycle with rebroadcast and expiry tracking.
+   * This is the canonical production path for transaction submission.
+   *
+   * @param base64 Base64-encoded transaction
+   * @param blockhash Recent blockhash
+   * @param lastValidBlockHeight Block height for blockhash expiry
+   * @param options Optional send/confirm options
+   * @returns Result with signature and confirmation status or error
+   */
+  sendAndConfirmTransaction(
+    base64: string,
+    blockhash: string,
+    lastValidBlockHeight: number,
+    options?: SendTransactionOptions & Partial<ConfirmationConfig>,
+  ): Promise<Result<{ signature: string; confirmed: boolean; slot?: number }, SdkError>>;
 
   /**
    * Get current priority fee estimate.

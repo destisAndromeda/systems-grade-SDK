@@ -94,6 +94,7 @@ export interface TrackedTransaction {
  */
 export interface SendWithPreflightGuardOptions {
   skipSimulation?: boolean;
+  skipPreflight?: boolean;
 }
 
 /**

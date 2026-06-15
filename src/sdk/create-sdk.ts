@@ -21,12 +21,13 @@ import { createResilientRpcClient } from "../rpc/resilient-client.js";
 import { normalizeRpcEndpointConfig, createInitialEndpointState } from "../rpc/endpoint.js";
 import { createFakeRpcTransport } from "../testing/fake-transport.js";
 import { createHttpRpcTransport } from "../rpc/http-transport.js";
-import { buildPreparedTransaction, sendTransactionViaRpc } from "../tx/send.js";
-import { pollTransactionConfirmation } from "../tx/confirm.js";
+import { buildPreparedTransaction, sendTransactionViaRpc, sendWithPreflightGuard } from "../tx/send.js";
+import { pollTransactionConfirmation, confirmWithRebroadcast } from "../tx/confirm.js";
+import { TransactionExpiredError, TransactionTimedOutError } from "../tx/types.js";
 import { createStaticPriorityFeeProvider, createRpcPriorityFeeProvider, getPriorityFeeEstimate } from "../fee/priority-fee.js";
 import { createInMemoryMetricsSink } from "../metrics/memory.js";
 import { routeTransaction } from "../relay/router.js";
-import { sendViaWallet } from "../wallet/adapter.js";
+import { sendViaWallet, signTransactionWithWallet } from "../wallet/adapter.js";
 import { buildVerifiedEndpointPool } from "../rpc/genesis-guard.js";
 
 
@@ -327,6 +328,15 @@ class SolanaReliabilitySdkImpl implements SolanaReliabilitySdk {
   genesisGuardWarning?: string | undefined;
   genesisGuardPromise?: Promise<any> | undefined;
 
+  // Track sent transactions for rebroadcast during confirmation
+  private readonly trackedTransactions = new Map<
+    string,
+    {
+      wire: string;
+      lastValidBlockHeight: number;
+      submittedAtMs: number;
+    }
+  >();
 
   constructor(
     rpc: RpcTransport,
@@ -343,6 +353,19 @@ class SolanaReliabilitySdkImpl implements SolanaReliabilitySdk {
     this.rpc = rpc;
   }
 
+  /**
+   * Clean up stale tracked transactions (older than 10 minutes).
+   * @internal
+   */
+  private cleanupStaleTracked(): void {
+    const cutoffMs = this.deps.clock.now() - 10 * 60 * 1000;
+    for (const [sig, tracked] of this.trackedTransactions.entries()) {
+      if (tracked.submittedAtMs < cutoffMs) {
+        this.trackedTransactions.delete(sig);
+      }
+    }
+  }
+
   async sendTransaction(
     base64: string,
     blockhash: string,
@@ -350,6 +373,9 @@ class SolanaReliabilitySdkImpl implements SolanaReliabilitySdk {
     options?: SendTransactionOptions,
   ): Promise<Result<string, SdkError>> {
     try {
+      // Clean up stale tracked transactions before adding a new one
+      this.cleanupStaleTracked();
+
       // Build and validate transaction
       const buildResult = buildPreparedTransaction(base64, blockhash, lastValidBlockHeight);
       if (!buildResult.ok) {
@@ -366,29 +392,102 @@ class SolanaReliabilitySdkImpl implements SolanaReliabilitySdk {
 
       // Route: wallet -> relay -> RPC
       if (this.wallet) {
-        const walletResult = await sendViaWallet(this.wallet, this.rpc, prepared, options);
-        if (walletResult.ok) {
-          return ok(walletResult.value.signature);
+        // Sign transaction with wallet first
+        const signResult = await signTransactionWithWallet(this.wallet, prepared.base64);
+        if (!signResult.ok) {
+          return signResult as Result<string, SdkError>;
         }
-        return walletResult as Result<string, SdkError>;
+
+        const signed = signResult.value;
+        const signedBase64 = signed.signedBase64;
+
+        // Send signed transaction through relay if configured, otherwise RPC
+        let signature: string;
+        if (this.relay && this.relayRouting) {
+          // For relay, we need to send the signed base64
+          const relayPrepared: PreparedTransaction = {
+            base64: signedBase64,
+            blockhash: prepared.blockhash,
+            lastValidBlockHeight: prepared.lastValidBlockHeight,
+          };
+          const routeResult = await routeTransaction(relayPrepared, this.relay, this.rpc, this.relayRouting, {
+            ...options,
+            maxRetries: 0,
+          });
+          if (!routeResult.ok) {
+            return routeResult as Result<string, SdkError>;
+          }
+          signature = routeResult.value.signature;
+        } else {
+          // Send via RPC with preflight guard
+          const guardOpts = {
+            skipSimulation: options?.skipPreflight,
+            skipPreflight: options?.skipPreflight,
+          };
+          const sendViaRpcResult = await sendWithPreflightGuard(this.rpc, signedBase64, guardOpts);
+          if (!sendViaRpcResult.ok) {
+            return sendViaRpcResult;
+          }
+          signature = sendViaRpcResult.value;
+        }
+
+        // Track the signed wire for rebroadcast
+        this.trackedTransactions.set(signature, {
+          wire: signedBase64,
+          lastValidBlockHeight: prepared.lastValidBlockHeight,
+          submittedAtMs: this.deps.clock.now(),
+        });
+
+        return ok(signature);
       }
 
       if (this.relay && this.relayRouting) {
-        const routeResult = await routeTransaction(prepared, this.relay, this.rpc, this.relayRouting, options);
-        if (routeResult.ok) {
-          return ok(routeResult.value.signature);
+        const routeResult = await routeTransaction(prepared, this.relay, this.rpc, this.relayRouting, {
+          ...options,
+          maxRetries: 0,
+        });
+        if (!routeResult.ok) {
+          return routeResult as Result<string, SdkError>;
         }
-        return routeResult as Result<string, SdkError>;
+
+        const signature = routeResult.value.signature;
+
+        // Track for rebroadcast even if relay succeeded
+        this.trackedTransactions.set(signature, {
+          wire: prepared.base64,
+          lastValidBlockHeight: prepared.lastValidBlockHeight,
+          submittedAtMs: this.deps.clock.now(),
+        });
+
+        return ok(signature);
       }
 
-      // Default: send via RPC
-      const sendResult = await sendTransactionViaRpc(this.rpc, prepared, options);
-      if (sendResult.ok) {
-        return ok(sendResult.value.signature);
+      // Default: send via RPC with preflight guard and SDK-controlled retry
+      const guardOpts = {
+        skipSimulation: options?.skipPreflight,
+        skipPreflight: options?.skipPreflight,
+      };
+      const sendResult = await sendWithPreflightGuard(this.rpc, prepared.base64, guardOpts);
+
+      if (!sendResult.ok) {
+        return sendResult;
       }
-      return sendResult as Result<string, SdkError>;
+
+      const signature = sendResult.value;
+
+      // Track for rebroadcast
+      this.trackedTransactions.set(signature, {
+        wire: prepared.base64,
+        lastValidBlockHeight: prepared.lastValidBlockHeight,
+        submittedAtMs: this.deps.clock.now(),
+      });
+
+      return ok(signature);
     } catch (error: unknown) {
-      const sdkError = error instanceof Error && (error as any).kind ? (error as SdkError) : createSdkError("Unknown", String(error));
+      const sdkError =
+        error instanceof Error && (error as any).kind
+          ? (error as SdkError)
+          : createSdkError("Unknown", String(error));
       return err(sdkError);
     }
   }
@@ -398,7 +497,79 @@ class SolanaReliabilitySdkImpl implements SolanaReliabilitySdk {
     config?: Partial<ConfirmationConfig>,
   ): Promise<Result<{ confirmed: boolean; slot?: number }, SdkError>> {
     try {
-      // Merge config overrides
+      // Check if this transaction is tracked
+      const tracked = this.trackedTransactions.get(signature);
+
+      if (tracked) {
+        // Use rebroadcast path for tracked transactions
+        const commitment = config?.commitment ?? this.confirmationConfig.commitment ?? "confirmed";
+        const pollIntervalMs =
+          config?.pollIntervalMs ?? this.confirmationConfig.pollIntervalMs;
+        const timeoutMs = config?.timeoutMs ?? this.confirmationConfig.timeoutMs;
+
+        const lifecycleResult = await confirmWithRebroadcast(
+          this.rpc,
+          tracked.wire,
+          {
+            lastValidBlockHeight: tracked.lastValidBlockHeight,
+            commitment: commitment as "confirmed" | "finalized",
+            pollIntervalMs,
+            timeoutMs,
+          },
+        );
+
+        // Remove from tracked after terminal state
+        this.trackedTransactions.delete(signature);
+
+        if (!lifecycleResult.ok) {
+          // Map lifecycle errors to SDK errors
+          const lifecycleError = lifecycleResult.error;
+
+          let sdkError: SdkError;
+          if (lifecycleError instanceof TransactionExpiredError) {
+            sdkError = createSdkError("InvalidTransaction", `Transaction expired: ${lifecycleError.message}`, {
+              cause: lifecycleError,
+            });
+          } else if (lifecycleError instanceof TransactionTimedOutError) {
+            sdkError = createSdkError("Timeout", `Transaction timed out: ${lifecycleError.message}`, {
+              cause: lifecycleError,
+            });
+          } else {
+            sdkError = createSdkError("Unknown", String(lifecycleError), {
+              cause: lifecycleError,
+            });
+          }
+
+          // Record timeout metric
+          this.metricsSink.record({
+            type: "tx_timeout",
+            timestampMs: this.deps.clock.now(),
+          });
+
+          return err(sdkError);
+        }
+
+        const status = lifecycleResult.value.status;
+        const confirmed = status.confirmationStatus === "confirmed" || status.confirmationStatus === "finalized";
+
+        // Record metric
+        this.metricsSink.record({
+          type: confirmed ? "tx_confirmed" : "tx_timeout",
+          timestampMs: this.deps.clock.now(),
+        });
+
+        const result: { confirmed: boolean; slot?: number } = {
+          confirmed,
+        };
+
+        if (status.slot !== undefined) {
+          result.slot = status.slot;
+        }
+
+        return ok(result);
+      }
+
+      // Unknown signature: use old polling fallback for backward compatibility
       const finalConfig: ConfirmationConfig = {
         pollIntervalMs: config?.pollIntervalMs ?? this.confirmationConfig.pollIntervalMs,
         timeoutMs: config?.timeoutMs ?? this.confirmationConfig.timeoutMs,
@@ -444,7 +615,61 @@ class SolanaReliabilitySdkImpl implements SolanaReliabilitySdk {
 
       return pollResult as Result<{ confirmed: boolean; slot?: number }, SdkError>;
     } catch (error: unknown) {
-      const sdkError = error instanceof Error && (error as any).kind ? (error as SdkError) : createSdkError("Unknown", String(error));
+      const sdkError =
+        error instanceof Error && (error as any).kind
+          ? (error as SdkError)
+          : createSdkError("Unknown", String(error));
+      return err(sdkError);
+    }
+  }
+
+  async sendAndConfirmTransaction(
+    base64: string,
+    blockhash: string,
+    lastValidBlockHeight: number,
+    options?: SendTransactionOptions & Partial<ConfirmationConfig>,
+  ): Promise<Result<{ signature: string; confirmed: boolean; slot?: number }, SdkError>> {
+    try {
+      // Send transaction using the resilient path
+      const sendResult = await this.sendTransaction(base64, blockhash, lastValidBlockHeight, options);
+      if (!sendResult.ok) {
+        return sendResult as Result<{ signature: string; confirmed: boolean; slot?: number }, SdkError>;
+      }
+
+      const signature = sendResult.value;
+
+      // Confirm using the rebroadcast path
+      const confirmResult = await this.confirmTransaction(signature, options);
+      if (!confirmResult.ok) {
+        return confirmResult as Result<{ signature: string; confirmed: boolean; slot?: number }, SdkError>;
+      }
+
+      const confirmation = confirmResult.value;
+
+      // Record combined metric
+      this.metricsSink.record({
+        type: "tx_send_and_confirm",
+        timestampMs: this.deps.clock.now(),
+        attributes: {
+          confirmed: confirmation.confirmed,
+        },
+      });
+
+      const result: { signature: string; confirmed: boolean; slot?: number } = {
+        signature,
+        confirmed: confirmation.confirmed,
+      };
+
+      if (confirmation.slot !== undefined) {
+        result.slot = confirmation.slot;
+      }
+
+      return ok(result);
+    } catch (error: unknown) {
+      const sdkError =
+        error instanceof Error && (error as any).kind
+          ? (error as SdkError)
+          : createSdkError("Unknown", String(error));
       return err(sdkError);
     }
   }
@@ -471,7 +696,10 @@ class SolanaReliabilitySdkImpl implements SolanaReliabilitySdk {
       // Error from fee estimation
       return estimateResult as Result<number, SdkError>;
     } catch (error: unknown) {
-      const sdkError = error instanceof Error && (error as any).kind ? (error as SdkError) : createSdkError("Unknown", String(error));
+      const sdkError =
+        error instanceof Error && (error as any).kind
+          ? (error as SdkError)
+          : createSdkError("Unknown", String(error));
       return err(sdkError);
     }
   }

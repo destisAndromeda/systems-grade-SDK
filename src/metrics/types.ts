@@ -17,6 +17,7 @@ export type MetricEventType =
   | "tx_send"
   | "tx_confirmed"
   | "tx_timeout"
+  | "tx_send_and_confirm"
   | "fee_estimate"
   | "relay_send"
   | "wallet_sign";
