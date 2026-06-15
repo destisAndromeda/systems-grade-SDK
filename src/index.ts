@@ -162,8 +162,9 @@ export type {
   TransactionWallet,
   WalletSignResult,
   WalletSendResult,
+  LegacyWalletAdapter,
 } from "./wallet/types.js";
-export { signTransactionWithWallet, sendViaWallet } from "./wallet/adapter.js";
+export { signTransactionWithWallet, sendViaWallet, createWalletFromLegacyAdapter } from "./wallet/adapter.js";
 export type { WalletStandardWalletLike, WalletStandardAccountLike } from "./wallet/standard-wallet.js";
 export {
   createWalletStandardTransactionWallet,

@@ -4,7 +4,7 @@
  * Functions to sign and send transactions via a connected wallet.
  */
 
-import type { TransactionWallet, WalletSignResult, WalletSendResult } from "./types.js";
+import type { TransactionWallet, WalletSignResult, WalletSendResult, LegacyWalletAdapter } from "./types.js";
 import type { PreparedTransaction, SendTransactionOptions } from "../tx/types.js";
 import type { RpcTransport } from "../rpc/types.js";
 import type { Result } from "../core/result.js";
@@ -155,3 +155,72 @@ export async function sendViaWallet(
   }
 }
 
+/**
+ * Bridge a legacy Solana wallet adapter into the SDK's TransactionWallet interface.
+ *
+ * Sign-only: bytes are deserialized, signed, re-serialized, and returned.
+ * No transaction is submitted, no RPC is called, no lifecycle is invoked.
+ *
+ * @param adapter  Legacy wallet adapter object (structural – no package import needed).
+ * @param deserialize  Converts raw transaction bytes into the adapter's transaction type.
+ * @returns A TransactionWallet whose signTransaction() method delegates to adapter.signTransaction.
+ *
+ * @throws SdkError("InvalidConfig") when adapter.signTransaction is absent.
+ *
+ * @example
+ * ```ts
+ * const wallet = createWalletFromLegacyAdapter(phantomAdapter, (bytes) =>
+ *   VersionedTransaction.deserialize(bytes),
+ * );
+ * ```
+ */
+export function createWalletFromLegacyAdapter<T extends { serialize(): Uint8Array }>(
+  adapter: LegacyWalletAdapter<T>,
+  deserialize: (bytes: Uint8Array) => T,
+): TransactionWallet & { readonly name: string } {
+  // Capture signTransaction with adapter as `this` so that methods
+  // relying on `this` inside the adapter continue to work correctly.
+  const signTransaction = adapter.signTransaction?.bind(adapter);
+
+  if (!signTransaction) {
+    throw createSdkError(
+      "InvalidConfig",
+      `Wallet "${adapter.name ?? "unknown"}" does not support signTransaction; sign-only flow is required`,
+    );
+  }
+
+  return {
+    // Expose adapter name for diagnostics; read lazily so late mutations are visible.
+    get name(): string {
+      return adapter.name ?? "legacy-adapter";
+    },
+
+    /**
+     * Sign raw transaction bytes via the legacy adapter.
+     *
+     * Flow: base64 → Uint8Array → deserialize → signTransaction → serialize → base64
+     */
+    async signTransaction(base64: string): Promise<WalletSignResult> {
+      // Decode the incoming base64 to raw bytes. Copy into a fresh Uint8Array
+      // to prevent accidental mutation of the underlying source buffer.
+      const buf = Buffer.from(base64, "base64");
+      const txBytes = new Uint8Array(buf.buffer, buf.byteOffset, buf.length);
+
+      // Deserialize into the adapter's transaction type.
+      const tx = deserialize(txBytes);
+
+      // Delegate signing to the legacy adapter (`this` already captured above).
+      const signed = await signTransaction(tx);
+
+      // Serialize the signed transaction back to bytes and encode as base64.
+      const signedBytes = signed.serialize();
+      const signedBase64 = Buffer.from(
+        signedBytes.buffer,
+        signedBytes.byteOffset,
+        signedBytes.byteLength,
+      ).toString("base64");
+
+      return { signedBase64 };
+    },
+  };
+}

@@ -35,3 +35,16 @@ export interface WalletSendResult {
   endpointId: string;
 }
 
+/**
+ * Minimal structural interface for legacy Solana wallet adapters.
+ *
+ * Intentionally does not import @solana/wallet-adapter; any object
+ * satisfying this shape is accepted (structural typing).
+ *
+ * T is the adapter's transaction type (must be serializable).
+ */
+export interface LegacyWalletAdapter<T extends { serialize(): Uint8Array } = { serialize(): Uint8Array }> {
+  name?: string;
+  signTransaction?(transaction: T): Promise<T>;
+}
+
