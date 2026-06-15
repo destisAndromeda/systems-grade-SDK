@@ -27,6 +27,8 @@ import { createStaticPriorityFeeProvider, createRpcPriorityFeeProvider, getPrior
 import { createInMemoryMetricsSink } from "../metrics/memory.js";
 import { routeTransaction } from "../relay/router.js";
 import { sendViaWallet } from "../wallet/adapter.js";
+import { buildVerifiedEndpointPool } from "../rpc/genesis-guard.js";
+
 
 /**
  * Default resilient RPC configuration.
@@ -268,20 +270,51 @@ export function createSolanaReliabilitySdk(
   // Metrics sink - use provided or create in-memory
   const metricsResult = config.metrics ?? createInMemoryMetricsSink();
 
-  return ok(
-    new SolanaReliabilitySdkImpl(
-      rpcTransport,
-      registry,
-      confirmationConfig,
-      priorityFeeConfig,
-      feeProviders,
-      config.relay,
-      config.relayRouting,
-      config.wallet,
-      metricsResult,
-      { clock, timer },
-    ),
+  const sdk = new SolanaReliabilitySdkImpl(
+    rpcTransport,
+    registry,
+    confirmationConfig,
+    priorityFeeConfig,
+    feeProviders,
+    config.relay,
+    config.relayRouting,
+    config.wallet,
+    metricsResult,
+    { clock, timer },
   );
+
+  if (config.enableGenesisGuard === true) {
+    const endpointsToVerify = registry.getAll().map((state) => ({
+      id: state.id,
+      url: state.config.url,
+    }));
+
+    sdk.genesisGuardPromise = buildVerifiedEndpointPool(endpointsToVerify, transports as any)
+      .then((result) => {
+        sdk.genesisHash = result.genesisHash;
+        sdk.genesisGuardWarning = result.warning;
+        sdk.quarantinedEndpoints = result.quarantined.map((ep) => ep.url);
+
+        const now = clock.now();
+        for (const q of result.quarantined) {
+          const state = registry.getById(q.id);
+          if (state) {
+            registry.upsert({
+              ...state,
+              circuitState: "open",
+              circuitOpenUntil: now + 365 * 24 * 60 * 60 * 1000 * 100, // 100 years
+            });
+          }
+        }
+
+        return result;
+      })
+      .catch((err) => {
+        console.error("Genesis guard verification failed:", err);
+      });
+  }
+
+  return ok(sdk);
 }
 
 /**
@@ -289,6 +322,11 @@ export function createSolanaReliabilitySdk(
  */
 class SolanaReliabilitySdkImpl implements SolanaReliabilitySdk {
   rpc: RpcTransport;
+  quarantinedEndpoints?: string[] | undefined;
+  genesisHash?: string | undefined;
+  genesisGuardWarning?: string | undefined;
+  genesisGuardPromise?: Promise<any> | undefined;
+
 
   constructor(
     rpc: RpcTransport,

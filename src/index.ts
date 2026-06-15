@@ -82,6 +82,13 @@ export {
 export { createHttpRpcTransport } from "./rpc/http-transport.js";
 export type { HttpRpcTransportConfig } from "./rpc/http-transport.js";
 export { createResilientRpcClient, executeResilientRpcRequest } from "./rpc/resilient-client.js";
+export type {
+  GenesisGuardEndpoint,
+  GenesisGuardTransport,
+  GenesisGuardResult,
+} from "./rpc/genesis-guard.js";
+export { buildVerifiedEndpointPool } from "./rpc/genesis-guard.js";
+
 
 // Transaction
 export type {
@@ -134,7 +141,14 @@ export type {
   RoutedTransactionResult,
 } from "./relay/types.js";
 export { routeTransaction } from "./relay/router.js";
-export { createJitoRelayClient } from "./relay/jito.js";
+export type { JitoTipFloor, JitoTipAggressiveness } from "./relay/jito.js";
+export {
+  createJitoRelayClient,
+  getJitoTipFloor,
+  selectJitoTipLamports,
+  resetJitoTipFloorCacheForTests,
+} from "./relay/jito.js";
+
 
 // Fee
 export type { PriorityFeeEstimate, PriorityFeeProvider, PriorityFeeConfig } from "./fee/types.js";

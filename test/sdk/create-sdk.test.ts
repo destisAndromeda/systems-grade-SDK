@@ -323,4 +323,51 @@ describe("createSolanaReliabilitySdk", () => {
       expect(Array.isArray(metrics)).toBe(true);
     }
   });
+
+  it("integrates genesis guard and quarantines non-majority endpoints", async () => {
+    const ep1 = "https://api1.com";
+    const ep2 = "https://api2.com";
+    const ep1_id = "https_api1_com";
+    const ep2_id = "https_api2_com";
+
+    const transport1 = createFakeRpcTransport({
+      endpointUrl: ep1,
+      endpointId: ep1_id,
+      responses: new Map([["getGenesisHash", { success: "hash-A" }]]),
+    });
+    const transport2 = createFakeRpcTransport({
+      endpointUrl: ep2,
+      endpointId: ep2_id,
+      responses: new Map([["getGenesisHash", { success: "hash-B" }]]),
+    });
+
+    const transports = new Map([
+      [ep1_id, transport1],
+      [ep2_id, transport2],
+    ]);
+
+    const result = createSolanaReliabilitySdk(
+      {
+        endpoints: [ep1, ep2],
+        enableGenesisGuard: true,
+      },
+      {
+        transports,
+      },
+    );
+
+    expect(isOk(result)).toBe(true);
+    if (isOk(result)) {
+      const sdk = result.value;
+      await sdk.genesisGuardPromise;
+
+      expect(sdk.genesisHash).toBe("hash-A");
+      expect(sdk.quarantinedEndpoints).toEqual([ep2]);
+
+      const health = sdk.getEndpointHealth();
+      const ep2Health = health.find(h => h.url === ep2);
+      expect(ep2Health?.circuitOpen).toBe(true);
+    }
+  });
 });
+

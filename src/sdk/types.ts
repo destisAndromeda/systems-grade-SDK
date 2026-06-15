@@ -20,6 +20,10 @@ export interface SolanaReliabilitySdkConfig {
   // RPC endpoints
   endpoints: string[];
 
+  // Genesis guard configuration
+  enableGenesisGuard?: boolean;
+  genesisGuardStrict?: boolean;
+
   // Retry policy
   retry?: Partial<{
     maxAttempts: number;
@@ -134,4 +138,12 @@ export interface SolanaReliabilitySdk {
    * @returns Array of metric events (empty array if not available)
    */
   getMetrics(): MetricEvent[];
+
+  /**
+   * Genesis guard results (if enabled)
+   */
+  quarantinedEndpoints?: string[] | undefined;
+  genesisHash?: string | undefined;
+  genesisGuardWarning?: string | undefined;
+  genesisGuardPromise?: Promise<any> | undefined;
 }

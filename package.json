@@ -36,6 +36,7 @@
     "example:wallet-adapter": "tsx examples/wallet-adapter.ts",
     "example:demo": "tsx examples/judge-demo.ts",
     "example:devnet": "tsx examples/devnet-smoke.ts",
+    "sim": "tsx scripts/landing-sim.ts",
     "pack:check": "npm pack --dry-run",
     "prepack": "npm run build",
     "prepublishOnly": "npm run typecheck && npm test && npm run build"
