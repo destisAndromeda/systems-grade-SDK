@@ -8,7 +8,7 @@ import type { SolanaReliabilitySdkConfig, SolanaReliabilitySdk } from "./types.j
 import type { Result } from "../core/result.js";
 import type { SdkError } from "../core/error.js";
 import type { ResilientRpcConfig, RpcTransport } from "../rpc/types.js";
-import type { ConfirmationConfig, PreparedTransaction, SendTransactionOptions, SendTransactionResult } from "../tx/types.js";
+import type { ConfirmationConfig, PreparedTransaction, SendTransactionOptions, SendTransactionResult, SendWithPreflightGuardOptions } from "../tx/types.js";
 import type { PriorityFeeConfig } from "../fee/types.js";
 import type { MetricEvent, MetricsSink } from "../metrics/types.js";
 import { ok, err, isOk } from "../core/result.js";
@@ -420,10 +420,11 @@ class SolanaReliabilitySdkImpl implements SolanaReliabilitySdk {
           signature = routeResult.value.signature;
         } else {
           // Send via RPC with preflight guard
-          const guardOpts = {
-            skipSimulation: options?.skipPreflight,
-            skipPreflight: options?.skipPreflight,
-          };
+          const guardOpts: SendWithPreflightGuardOptions = {};
+          if (options?.skipPreflight === true) {
+            guardOpts.skipSimulation = true;
+            guardOpts.skipPreflight = true;
+          }
           const sendViaRpcResult = await sendWithPreflightGuard(this.rpc, signedBase64, guardOpts);
           if (!sendViaRpcResult.ok) {
             return sendViaRpcResult;
@@ -463,10 +464,11 @@ class SolanaReliabilitySdkImpl implements SolanaReliabilitySdk {
       }
 
       // Default: send via RPC with preflight guard and SDK-controlled retry
-      const guardOpts = {
-        skipSimulation: options?.skipPreflight,
-        skipPreflight: options?.skipPreflight,
-      };
+      const guardOpts: SendWithPreflightGuardOptions = {};
+      if (options?.skipPreflight === true) {
+        guardOpts.skipSimulation = true;
+        guardOpts.skipPreflight = true;
+      }
       const sendResult = await sendWithPreflightGuard(this.rpc, prepared.base64, guardOpts);
 
       if (!sendResult.ok) {

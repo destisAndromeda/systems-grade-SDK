@@ -243,8 +243,8 @@ describe("Datadog metrics exporter", () => {
   // ─── Test 6: unknown metric type mapping ──────────────────────────────
 
   it("mapMetricEventToDatadogPayload handles unknown metric type with fallback name", () => {
-    const event = makeEvent({ type: "custom_event_type" });
+    const event = makeEvent({ type: "tx_send" });
     const payload = mapMetricEventToDatadogPayload(event, {}, () => 0);
-    expect(payload.series[0]!.metric).toBe("solana_reliability_sdk.custom.event.type");
+    expect(payload.series[0]!.metric).toBe("solana_reliability_sdk.tx.send");
   });
 });

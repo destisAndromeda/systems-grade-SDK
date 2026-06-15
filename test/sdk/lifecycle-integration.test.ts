@@ -14,6 +14,7 @@
 import { describe, it, expect } from "vitest";
 import { createSolanaReliabilitySdk } from "../../src/sdk/create-sdk.js";
 import { isOk, isErr, ok } from "../../src/core/result.js";
+import { createSdkError } from "../../src/core/error.js";
 import { createFakeRpcTransport } from "../../src/testing/fake-transport.js";
 import { createFakeClock } from "../../src/testing/fake-clock.js";
 import { createFakeTimer } from "../../src/testing/fake-timer.js";
@@ -73,12 +74,14 @@ describe("SDK Lifecycle Integration", () => {
       );
 
       expect(isOk(sdkResult)).toBe(true);
+      if (!isOk(sdkResult)) throw new Error("SDK creation failed");
       const sdk = sdkResult.value;
 
       const base64 = encodeTransaction(1);
       const result = await sdk.sendTransaction(base64, "test-blockhash", 100);
 
       expect(isOk(result)).toBe(true);
+      if (!isOk(result)) throw new Error("Send failed");
       expect(result.value).toBe("test-signature-1");
 
       // Verify calls were made
@@ -130,6 +133,7 @@ describe("SDK Lifecycle Integration", () => {
       );
 
       expect(isOk(sdkResult)).toBe(true);
+      if (!isOk(sdkResult)) throw new Error("SDK creation failed");
       const sdk = sdkResult.value;
 
       const base64 = encodeTransaction(2);
@@ -187,12 +191,14 @@ describe("SDK Lifecycle Integration", () => {
       );
 
       expect(isOk(sdkResult)).toBe(true);
+      if (!isOk(sdkResult)) throw new Error("SDK creation failed");
       const sdk = sdkResult.value;
 
       // Send transaction
       const base64 = encodeTransaction(3);
       const sendResult = await sdk.sendTransaction(base64, "blockhash", 300);
       expect(isOk(sendResult)).toBe(true);
+      if (!isOk(sendResult)) throw new Error("Send failed");
 
       const signature = sendResult.value;
 
@@ -203,12 +209,11 @@ describe("SDK Lifecycle Integration", () => {
       });
 
       expect(isOk(confirmResult)).toBe(true);
+      if (!isOk(confirmResult)) throw new Error("Confirm failed");
       
       // Verify transaction was confirmed and signature was tracked
-      if (isOk(confirmResult)) {
-        expect(confirmResult.value.confirmed).toBe(true);
-        expect(confirmResult.value.slot).toBe(150);
-      }
+      expect(confirmResult.value.confirmed).toBe(true);
+      expect(confirmResult.value.slot).toBe(150);
       
       // Verify getSignatureStatuses was called (lifecycle polling)
       const statusCall = fakeTransport
@@ -258,11 +263,13 @@ describe("SDK Lifecycle Integration", () => {
       );
 
       expect(isOk(sdkResult)).toBe(true);
+      if (!isOk(sdkResult)) throw new Error("SDK creation failed");
       const sdk = sdkResult.value;
 
       const base64 = encodeTransaction(4);
       const sendResult = await sdk.sendTransaction(base64, "blockhash", 400);
       expect(isOk(sendResult)).toBe(true);
+      if (!isOk(sendResult)) throw new Error("Send failed");
 
       const signature = sendResult.value;
 
@@ -317,6 +324,7 @@ describe("SDK Lifecycle Integration", () => {
       );
 
       expect(isOk(sdkResult)).toBe(true);
+      if (!isOk(sdkResult)) throw new Error("SDK creation failed");
       const sdk = sdkResult.value;
 
       // Confirm unknown signature
@@ -391,11 +399,13 @@ describe("SDK Lifecycle Integration", () => {
       );
 
       expect(isOk(sdkResult)).toBe(true);
+      if (!isOk(sdkResult)) throw new Error("SDK creation failed");
       const sdk = sdkResult.value;
 
       const base64 = encodeTransaction(5);
       const sendResult = await sdk.sendTransaction(base64, "blockhash", 500);
       expect(isOk(sendResult)).toBe(true);
+      if (!isOk(sendResult)) throw new Error("Send failed");
 
       const signature = sendResult.value;
 
@@ -457,11 +467,13 @@ describe("SDK Lifecycle Integration", () => {
       );
 
       expect(isOk(sdkResult)).toBe(true);
+      if (!isOk(sdkResult)) throw new Error("SDK creation failed");
       const sdk = sdkResult.value;
 
       const base64 = encodeTransaction(6);
       const sendResult = await sdk.sendTransaction(base64, "blockhash", 600);
       expect(isOk(sendResult)).toBe(true);
+      if (!isOk(sendResult)) throw new Error("Send failed");
 
       const signature = sendResult.value;
 
@@ -502,7 +514,7 @@ describe("SDK Lifecycle Integration", () => {
       });
 
       const fakeRelay = createFakeRelayClient({
-        error: new Error("Relay failed"),
+        error: createSdkError("NetworkError", "Relay failed"),
       });
 
       const sdkResult = createSolanaReliabilitySdk(
@@ -523,11 +535,13 @@ describe("SDK Lifecycle Integration", () => {
       );
 
       expect(isOk(sdkResult)).toBe(true);
+      if (!isOk(sdkResult)) throw new Error("SDK creation failed");
       const sdk = sdkResult.value;
 
       const base64 = encodeTransaction(7);
       const sendResult = await sdk.sendTransaction(base64, "blockhash", 700);
       expect(isOk(sendResult)).toBe(true);
+      if (!isOk(sendResult)) throw new Error("Send failed");
 
       const signature = sendResult.value;
 
@@ -579,6 +593,7 @@ describe("SDK Lifecycle Integration", () => {
       );
 
       expect(isOk(sdkResult)).toBe(true);
+      if (!isOk(sdkResult)) throw new Error("SDK creation failed");
       const sdk = sdkResult.value;
 
       const base64 = encodeTransaction(8);
@@ -588,11 +603,10 @@ describe("SDK Lifecycle Integration", () => {
       });
 
       expect(isOk(result)).toBe(true);
-      if (isOk(result)) {
-        expect(result.value.signature).toBe("combined-sig");
-        expect(result.value.confirmed).toBe(true);
-        expect(result.value.slot).toBe(800);
-      }
+      if (!isOk(result)) throw new Error("Send and confirm failed");
+      expect(result.value.signature).toBe("combined-sig");
+      expect(result.value.confirmed).toBe(true);
+      expect(result.value.slot).toBe(800);
     });
 
     it("returns signature and slot in combined result", async () => {
@@ -633,17 +647,17 @@ describe("SDK Lifecycle Integration", () => {
       );
 
       expect(isOk(sdkResult)).toBe(true);
+      if (!isOk(sdkResult)) throw new Error("SDK creation failed");
       const sdk = sdkResult.value;
 
       const base64 = encodeTransaction(9);
       const result = await sdk.sendAndConfirmTransaction(base64, "blockhash", 900);
 
       expect(isOk(result)).toBe(true);
-      if (isOk(result)) {
-        expect(result.value.signature).toBeDefined();
-        expect(result.value.confirmed).toBe(true);
-        expect(result.value.slot).toBe(999);
-      }
+      if (!isOk(result)) throw new Error("Send and confirm with slot failed");
+      expect(result.value.signature).toBeDefined();
+      expect(result.value.confirmed).toBe(true);
+      expect(result.value.slot).toBe(999);
     });
   });
 
@@ -686,11 +700,13 @@ describe("SDK Lifecycle Integration", () => {
       );
 
       expect(isOk(sdkResult)).toBe(true);
+      if (!isOk(sdkResult)) throw new Error("SDK creation failed");
       const sdk = sdkResult.value;
 
       const base64 = encodeTransaction(10);
       const sendResult = await sdk.sendTransaction(base64, "blockhash", 100); // lastValidBlockHeight: 100
       expect(isOk(sendResult)).toBe(true);
+      if (!isOk(sendResult)) throw new Error("Send failed");
 
       const signature = sendResult.value;
 
@@ -746,6 +762,7 @@ describe("SDK Lifecycle Integration", () => {
       );
 
       expect(isOk(sdkResult)).toBe(true);
+      if (!isOk(sdkResult)) throw new Error("SDK creation failed");
       const sdk = sdkResult.value;
 
       // Old API still works
@@ -797,6 +814,7 @@ describe("SDK Lifecycle Integration", () => {
       );
 
       expect(isOk(sdkResult)).toBe(true);
+      if (!isOk(sdkResult)) throw new Error("SDK creation failed");
       const sdk = sdkResult.value;
 
       const base64 = encodeTransaction(11);

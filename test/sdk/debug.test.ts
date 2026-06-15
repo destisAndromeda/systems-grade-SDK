@@ -63,6 +63,7 @@ describe("Debug Test", () => {
     }
 
     expect(sdkResult.ok).toBe(true);
+    if (!sdkResult.ok) throw new Error("SDK initialization failed");
     const sdk = sdkResult.value;
 
     const base64 = encodeTransaction(1);

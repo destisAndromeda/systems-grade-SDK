@@ -7,6 +7,7 @@ import {
   formatTransactionStatus,
   createTransactionStatusReport,
 } from "../../src/cli/status.js";
+import type { Result } from "../../src/core/result.js";
 import { createFakeRpcTransport } from "../../src/testing/fake-transport.js";
 import { ok, err } from "../../src/core/result.js";
 import { createSdkError } from "../../src/core/error.js";
@@ -66,7 +67,7 @@ describe("formatTransactionStatus", () => {
     // Cast through unknown to simulate an unexpected runtime status kind
     const result = formatTransactionStatus(
       "sig-unknown",
-      ok({ kind: "unexpected-kind" } as unknown as ReturnType<typeof ok>["value"]),
+      ok({ kind: "unexpected-kind" } as unknown as Result<any, never>["ok"] extends true ? any : never),
     );
     expect(result).toContain("unknown status");
   });
