@@ -92,6 +92,13 @@ export type {
   TransactionConfirmationStatus,
   ConfirmationConfig,
   PollTransactionConfirmationResult,
+  LifecycleClock,
+  TrackedTransaction,
+  SendWithPreflightGuardOptions,
+} from "./tx/types.js";
+export {
+  TransactionExpiredError,
+  TransactionTimedOutError,
 } from "./tx/types.js";
 export {
   buildPreparedTransaction,
@@ -99,12 +106,18 @@ export {
   simulateTransaction,
   sendTransactionViaRpc,
   sendTransactionWithResilience,
+  sendTransactionRaw,
+  sendWithPreflightGuard,
 } from "./tx/send.js";
 export {
   fetchTransactionStatus,
   isTerminalStatus,
   pollTransactionConfirmation,
 } from "./tx/confirm.js";
+export {
+  isAlreadyProcessed,
+  deriveSignatureFromWire,
+} from "./tx/lifecycle.js";
 
 // Relay
 export type {

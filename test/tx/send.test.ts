@@ -9,6 +9,8 @@ import {
   simulateTransaction,
   sendTransactionViaRpc,
   sendTransactionWithResilience,
+  sendTransactionRaw,
+  sendWithPreflightGuard,
 } from "../../src/tx/send.js";
 import { createFakeRpcTransport } from "../../src/testing/fake-transport.js";
 import { createSdkError, isKindOfSdkError } from "../../src/core/error.js";
@@ -799,3 +801,202 @@ describe("sendTransactionWithResilience", () => {
     expect(isOk(result)).toBe(false);
   });
 });
+
+describe("sendTransactionRaw", () => {
+  it("sends sendTransaction with exact method and options, returning signature", async () => {
+    const transport = createFakeRpcTransport({
+      endpointUrl: "https://api.test",
+      endpointId: "test",
+      responses: new Map([["sendTransaction", { success: "test-signature-123" }]]),
+    });
+
+    const base64 = Buffer.from("dummy-tx-bytes").toString("base64");
+    const result = await sendTransactionRaw(transport, base64);
+
+    expect(isOk(result)).toBe(true);
+    if (isOk(result)) {
+      expect(result.value).toBe("test-signature-123");
+    }
+
+    const calls = transport.getCalls();
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.method).toBe("sendTransaction");
+    expect(calls[0]?.params).toEqual([
+      base64,
+      {
+        encoding: "base64",
+        maxRetries: 0,
+        skipPreflight: false,
+        preflightCommitment: "processed",
+      },
+    ]);
+  });
+
+  it("propagates transport errors in SDK error style", async () => {
+    const error = createSdkError("NetworkError", "Send failed");
+    const transport = createFakeRpcTransport({
+      endpointUrl: "https://api.test",
+      endpointId: "test",
+      responses: new Map([["sendTransaction", { error }]]),
+    });
+
+    const base64 = Buffer.from("dummy-tx-bytes").toString("base64");
+    const result = await sendTransactionRaw(transport, base64);
+
+    expect(isOk(result)).toBe(false);
+    if (!isOk(result)) {
+      expect(result.error.kind).toBe("NetworkError");
+      expect(result.error.message).toBe("Send failed");
+    }
+  });
+});
+
+describe("sendWithPreflightGuard", () => {
+  it("calls simulateTransaction before sendTransaction and succeeds when no err", async () => {
+    const transport = createFakeRpcTransport({
+      endpointUrl: "https://api.test",
+      endpointId: "test",
+      responses: new Map([
+        [
+          "simulateTransaction",
+          {
+            success: {
+              value: {
+                err: null,
+                logs: ["program log: success"],
+              },
+            },
+          },
+        ],
+        [
+          "sendTransaction",
+          {
+            success: "guarded-signature-123",
+          },
+        ],
+      ]),
+    });
+
+    const base64 = Buffer.from("dummy-tx-bytes").toString("base64");
+    const result = await sendWithPreflightGuard(transport, base64);
+
+    expect(isOk(result)).toBe(true);
+    if (isOk(result)) {
+      expect(result.value).toBe("guarded-signature-123");
+    }
+
+    const calls = transport.getCalls();
+    expect(calls).toHaveLength(2);
+    expect(calls[0]?.method).toBe("simulateTransaction");
+    expect(calls[0]?.params).toEqual([
+      base64,
+      {
+        encoding: "base64",
+        commitment: "processed",
+      },
+    ]);
+
+    expect(calls[1]?.method).toBe("sendTransaction");
+    expect(calls[1]?.params).toEqual([
+      base64,
+      {
+        encoding: "base64",
+        maxRetries: 0,
+        skipPreflight: true,
+      },
+    ]);
+  });
+
+  it("does not call sendTransaction if simulation returns err, and preserves logs", async () => {
+    const transport = createFakeRpcTransport({
+      endpointUrl: "https://api.test",
+      endpointId: "test",
+      responses: new Map([
+        [
+          "simulateTransaction",
+          {
+            success: {
+              value: {
+                err: { InstructionError: [0, "Custom"] },
+                logs: ["program log: fail"],
+              },
+            },
+          },
+        ],
+      ]),
+    });
+
+    const base64 = Buffer.from("dummy-tx-bytes").toString("base64");
+    const result = await sendWithPreflightGuard(transport, base64);
+
+    expect(isOk(result)).toBe(false);
+    if (!isOk(result)) {
+      expect(result.error.kind).toBe("InvalidTransaction");
+      expect(result.error.message).toContain("Simulation failed");
+      const cause = result.error.cause as any;
+      expect(cause?.simulationError).toEqual({ InstructionError: [0, "Custom"] });
+      expect(cause?.logs).toEqual(["program log: fail"]);
+    }
+
+    const calls = transport.getCalls();
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.method).toBe("simulateTransaction");
+  });
+
+  it("skips simulation when skipSimulation option is true", async () => {
+    const transport = createFakeRpcTransport({
+      endpointUrl: "https://api.test",
+      endpointId: "test",
+      responses: new Map([
+        [
+          "sendTransaction",
+          {
+            success: "skipped-simulation-sig",
+          },
+        ],
+      ]),
+    });
+
+    const base64 = Buffer.from("dummy-tx-bytes").toString("base64");
+    const result = await sendWithPreflightGuard(transport, base64, { skipSimulation: true });
+
+    expect(isOk(result)).toBe(true);
+    if (isOk(result)) {
+      expect(result.value).toBe("skipped-simulation-sig");
+    }
+
+    const calls = transport.getCalls();
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.method).toBe("sendTransaction");
+    expect(calls[0]?.params).toEqual([
+      base64,
+      {
+        encoding: "base64",
+        maxRetries: 0,
+        skipPreflight: false,
+        preflightCommitment: "processed",
+      },
+    ]);
+  });
+
+  it("propagates transport errors on simulation or send", async () => {
+    const error = createSdkError("NetworkError", "Connection lost");
+    const transport = createFakeRpcTransport({
+      endpointUrl: "https://api.test",
+      endpointId: "test",
+      responses: new Map([
+        ["simulateTransaction", { error }],
+      ]),
+    });
+
+    const base64 = Buffer.from("dummy-tx-bytes").toString("base64");
+    const result = await sendWithPreflightGuard(transport, base64);
+
+    expect(isOk(result)).toBe(false);
+    if (!isOk(result)) {
+      expect(result.error.kind).toBe("NetworkError");
+      expect(result.error.message).toBe("Connection lost");
+    }
+  });
+});
+
