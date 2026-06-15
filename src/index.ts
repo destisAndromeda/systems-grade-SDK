@@ -116,6 +116,7 @@ export {
   fetchTransactionStatus,
   isTerminalStatus,
   pollTransactionConfirmation,
+  confirmWithRebroadcast,
 } from "./tx/confirm.js";
 export {
   isAlreadyProcessed,

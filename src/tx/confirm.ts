@@ -9,7 +9,12 @@ import type {
   TransactionConfirmationStatus,
   ConfirmationConfig,
   PollTransactionConfirmationResult,
+  TransactionLifecycleResult,
+  TransactionLifecycleDeps,
+  LifecycleClock,
 } from "./types.js";
+import { runTransactionLifecycle, deriveSignatureFromWire } from "./lifecycle.js";
+import { sendTransactionRaw } from "./send.js";
 import type { RpcTransport } from "../rpc/types.js";
 import type { Timer } from "../core/timer.js";
 import type { Clock } from "../core/clock.js";
@@ -219,3 +224,115 @@ export async function pollTransactionConfirmation(
     });
   }
 }
+
+/**
+ * Poll for transaction confirmation using the canonical transaction lifecycle.
+ *
+ * Rebroadcasts the transaction periodically if it remains unconfirmed.
+ *
+ * @param transport RPC transport
+ * @param wire Base64 transaction wire
+ * @param options Configuration options for confirmation and rebroadcasting
+ * @param deps Optional dependencies (clock, resign helper)
+ * @returns Result containing the transaction lifecycle result or error
+ */
+export async function confirmWithRebroadcast(
+  transport: RpcTransport,
+  wire: string,
+  options: {
+    lastValidBlockHeight: number;
+    commitment?: "confirmed" | "finalized";
+    pollIntervalMs?: number;
+    rebroadcastIntervalMs?: number;
+    deathGraceMs?: number;
+    timeoutMs?: number;
+    resignOnExpiry?: boolean;
+    maxResignatures?: number;
+  },
+  deps?: {
+    clock?: LifecycleClock;
+    resign?: TransactionLifecycleDeps["resign"];
+  },
+): Promise<Result<TransactionLifecycleResult, Error>> {
+  const clock = deps?.clock ?? {
+    now: () => Date.now(),
+    sleep: (ms: number) => new Promise((resolve) => setTimeout(resolve, ms)),
+  };
+
+  const lifecycleDeps: TransactionLifecycleDeps = {
+    clock,
+    async submit(w: string) {
+      const res = await sendTransactionRaw(transport, w);
+      if (!res.ok) {
+        throw res.error;
+      }
+      return res.value;
+    },
+    async getStatuses(signatures: string[], searchTransactionHistory: boolean) {
+      try {
+        const response = await transport.send<
+          unknown[],
+          { value?: Array<{ confirmationStatus?: "processed" | "confirmed" | "finalized"; slot?: number; err?: unknown } | null> }
+        >("getSignatureStatuses", [signatures, { searchTransactionHistory }]);
+
+        if (!response || !response.value) {
+          return signatures.map(() => null);
+        }
+        return response.value;
+      } catch (error) {
+        throw mapTransportErrorToSdkError(error);
+      }
+    },
+    async getBlockHeight() {
+      try {
+        const height = await transport.send<unknown[], number>("getBlockHeight", []);
+        return height;
+      } catch (error) {
+        throw mapTransportErrorToSdkError(error);
+      }
+    },
+    deriveSignatureFromWire(w: string) {
+      return deriveSignatureFromWire(w);
+    },
+  };
+
+  if (deps?.resign) {
+    lifecycleDeps.resign = deps.resign;
+  }
+
+  const lifecycleOptions: {
+    pollIntervalMs?: number;
+    rebroadcastIntervalMs?: number;
+    deathGraceMs?: number;
+    timeoutMs?: number;
+    resignOnExpiry?: boolean;
+    maxResignatures?: number;
+  } = {};
+
+  if (options.pollIntervalMs !== undefined) lifecycleOptions.pollIntervalMs = options.pollIntervalMs;
+  if (options.rebroadcastIntervalMs !== undefined) lifecycleOptions.rebroadcastIntervalMs = options.rebroadcastIntervalMs;
+  if (options.deathGraceMs !== undefined) lifecycleOptions.deathGraceMs = options.deathGraceMs;
+  if (options.timeoutMs !== undefined) lifecycleOptions.timeoutMs = options.timeoutMs;
+  if (options.resignOnExpiry !== undefined) lifecycleOptions.resignOnExpiry = options.resignOnExpiry;
+  if (options.maxResignatures !== undefined) lifecycleOptions.maxResignatures = options.maxResignatures;
+
+  try {
+    const initialSig = deriveSignatureFromWire(wire);
+    const result = await runTransactionLifecycle(
+      {
+        wire,
+        signature: initialSig,
+        lastValidBlockHeight: options.lastValidBlockHeight,
+      },
+      lifecycleOptions,
+      lifecycleDeps,
+    );
+    return ok(result);
+  } catch (errVal: unknown) {
+    if (errVal instanceof Error) {
+      return err(errVal);
+    }
+    return err(new Error(String(errVal)));
+  }
+}
+

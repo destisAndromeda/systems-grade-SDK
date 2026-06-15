@@ -199,13 +199,14 @@ export async function runTransactionLifecycle(
   deps: TransactionLifecycleDeps,
 ): Promise<TransactionLifecycleResult> {
   const pollIntervalMs = options.pollIntervalMs ?? 2_000;
-  const rebroadcastIntervalMs = options.rebroadcastIntervalMs ?? 2_000; // accepted but unused for now
+  const rebroadcastIntervalMs = options.rebroadcastIntervalMs ?? 2_000;
   const deathGraceMs = options.deathGraceMs ?? 1_000;
   const timeoutMs = options.timeoutMs;
   const resignOnExpiry = options.resignOnExpiry ?? false;
   const maxResignatures = options.maxResignatures ?? 0;
 
   const startedAt = deps.clock.now();
+  let lastRebroadcastAt = startedAt;
   const tracked: TrackedTransaction[] = [];
   let resignAttempt = 0;
 
@@ -240,6 +241,22 @@ export async function runTransactionLifecycle(
         wire: input.wire,
         lastValidBlockHeight: input.lastValidBlockHeight,
       });
+    }
+  }
+
+  async function rebroadcastKnownWires(): Promise<void> {
+    const wiresToRebroadcast = [...tracked].reverse();
+    for (const tx of wiresToRebroadcast) {
+      try {
+        await deps.submit(tx.wire);
+      } catch (err) {
+        if (isAlreadyProcessed(err)) {
+          continue;
+        }
+        // Ignore non-fatal rebroadcast errors.
+        // Lifecycle will keep polling statuses and handle expiry/timeout correctly.
+        continue;
+      }
     }
   }
 
@@ -313,7 +330,14 @@ export async function runTransactionLifecycle(
       }
     }
 
-    // 4. Sleep pollIntervalMs
+    // 4. Periodic rebroadcast of known wires
+    const now = deps.clock.now();
+    if (rebroadcastIntervalMs > 0 && now - lastRebroadcastAt >= rebroadcastIntervalMs) {
+      await rebroadcastKnownWires();
+      lastRebroadcastAt = now;
+    }
+
+    // 5. Sleep pollIntervalMs
     await deps.clock.sleep(pollIntervalMs);
   }
 }

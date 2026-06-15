@@ -569,5 +569,254 @@ describe("runTransactionLifecycle", () => {
     expect(lastCall).toBeDefined();
     expect(lastCall!.signatures).toEqual(["sig-tx1", "sig-tx2", "sig-tx3"]);
   });
+
+  it("periodically rebroadcasts tracked wires inside lifecycle", async () => {
+    const { deps, submitCalls } = createMockDeps({
+      getBlockHeight: async () => 100,
+    });
+
+    const promise = runTransactionLifecycle(
+      { wire: "tx1", lastValidBlockHeight: 200 },
+      {
+        pollIntervalMs: 100,
+        rebroadcastIntervalMs: 200,
+        timeoutMs: 500,
+      },
+      deps
+    );
+
+    await expect(promise).rejects.toThrow(TransactionTimedOutError);
+
+    // Initial submit (1) + rebroadcast at now=200 (1) + rebroadcast at now=400 (1) = 3 calls
+    expect(submitCalls).toEqual(["tx1", "tx1", "tx1"]);
+  });
+
+  it("does not create new tracked signatures during rebroadcast", async () => {
+    let submitCount = 0;
+    const { deps, getStatusesCalls } = createMockDeps({
+      getBlockHeight: async () => 100,
+      submit: async (wire) => {
+        submitCount++;
+        return `sig-tx1-attempt-${submitCount}`;
+      },
+    });
+
+    const promise = runTransactionLifecycle(
+      { wire: "tx1", lastValidBlockHeight: 200 },
+      {
+        pollIntervalMs: 100,
+        rebroadcastIntervalMs: 200,
+        timeoutMs: 500,
+      },
+      deps
+    );
+
+    await expect(promise).rejects.toThrow(TransactionTimedOutError);
+
+    // Verify all getStatuses calls only tracked "sig-tx1-attempt-1", and never "sig-tx1-attempt-2" or "sig-tx1-attempt-3"
+    for (const call of getStatusesCalls) {
+      expect(call.signatures).toEqual(["sig-tx1-attempt-1"]);
+    }
+  });
+
+  it("ignores AlreadyProcessed during rebroadcast", async () => {
+    let submitCount = 0;
+    let getStatusesCount = 0;
+    const { deps } = createMockDeps({
+      getBlockHeight: async () => 100,
+      submit: async (wire) => {
+        submitCount++;
+        if (submitCount > 1) {
+          throw new Error("already processed");
+        }
+        return `sig-${wire}`;
+      },
+      getStatuses: async (sigs) => {
+        getStatusesCount++;
+        if (getStatusesCount === 4) {
+          return [{ confirmationStatus: "confirmed", slot: 42 }];
+        }
+        return [null];
+      },
+    });
+
+    const result = await runTransactionLifecycle(
+      { wire: "tx1", lastValidBlockHeight: 200 },
+      {
+        pollIntervalMs: 100,
+        rebroadcastIntervalMs: 200,
+        timeoutMs: 1000,
+      },
+      deps
+    );
+
+    expect(result.signature).toBe("sig-tx1");
+    expect(result.status.confirmationStatus).toBe("confirmed");
+  });
+
+  it("ignores non-fatal rebroadcast errors and continues polling", async () => {
+    let submitCount = 0;
+    let getStatusesCount = 0;
+    const { deps } = createMockDeps({
+      getBlockHeight: async () => 100,
+      submit: async (wire) => {
+        submitCount++;
+        if (submitCount > 1) {
+          throw new Error("Network Error");
+        }
+        return `sig-${wire}`;
+      },
+      getStatuses: async (sigs) => {
+        getStatusesCount++;
+        if (getStatusesCount === 4) {
+          return [{ confirmationStatus: "confirmed", slot: 42 }];
+        }
+        return [null];
+      },
+    });
+
+    const result = await runTransactionLifecycle(
+      { wire: "tx1", lastValidBlockHeight: 200 },
+      {
+        pollIntervalMs: 100,
+        rebroadcastIntervalMs: 200,
+        timeoutMs: 1000,
+      },
+      deps
+    );
+
+    expect(result.signature).toBe("sig-tx1");
+    expect(result.status.confirmationStatus).toBe("confirmed");
+  });
+
+  it("rebroadcasts without dropping old signatures", async () => {
+    let height = 100;
+    const { deps, submitCalls, getStatusesCalls } = createMockDeps({
+      getBlockHeight: async () => height,
+      resign: async (previous, attempt) => {
+        return { wire: "tx2", lastValidBlockHeight: 300 };
+      },
+    });
+
+    const promise = runTransactionLifecycle(
+      { wire: "tx1", lastValidBlockHeight: 100 },
+      {
+        pollIntervalMs: 100,
+        rebroadcastIntervalMs: 200,
+        deathGraceMs: 50,
+        resignOnExpiry: true,
+        maxResignatures: 1,
+        timeoutMs: 800,
+      },
+      deps
+    );
+
+    let heightCalls = 0;
+    deps.getBlockHeight = async () => {
+      heightCalls++;
+      if (heightCalls >= 2) {
+        return 101;
+      }
+      return 100;
+    };
+
+    await expect(promise).rejects.toThrow(TransactionTimedOutError);
+
+    expect(submitCalls).toContain("tx1");
+    expect(submitCalls).toContain("tx2");
+    
+    const lastCall = getStatusesCalls[getStatusesCalls.length - 1];
+    expect(lastCall!.signatures).toEqual(["sig-tx1", "sig-tx2"]);
+  });
+
+  it("does not resign because rebroadcast failed", async () => {
+    let resignCalled = false;
+    let submitCount = 0;
+    const { deps } = createMockDeps({
+      getBlockHeight: async () => 100,
+      submit: async (wire) => {
+        submitCount++;
+        if (submitCount > 1) {
+          throw new Error("Network Error");
+        }
+        return `sig-${wire}`;
+      },
+      resign: async () => {
+        resignCalled = true;
+        return { wire: "tx2", lastValidBlockHeight: 200 };
+      },
+    });
+
+    const promise = runTransactionLifecycle(
+      { wire: "tx1", lastValidBlockHeight: 200 },
+      {
+        pollIntervalMs: 100,
+        rebroadcastIntervalMs: 200,
+        timeoutMs: 500,
+        resignOnExpiry: true,
+        maxResignatures: 1,
+      },
+      deps
+    );
+
+    await expect(promise).rejects.toThrow(TransactionTimedOutError);
+    expect(resignCalled).toBe(false);
+  });
+
+  it("does not timeout because rebroadcast failed", async () => {
+    let submitCount = 0;
+    let getStatusesCount = 0;
+    const { deps } = createMockDeps({
+      getBlockHeight: async () => 100,
+      submit: async (wire) => {
+        submitCount++;
+        if (submitCount > 1) {
+          throw new Error("Network Error");
+        }
+        return `sig-${wire}`;
+      },
+      getStatuses: async (sigs) => {
+        getStatusesCount++;
+        if (getStatusesCount === 4) {
+          return [{ confirmationStatus: "confirmed", slot: 42 }];
+        }
+        return [null];
+      },
+    });
+
+    const result = await runTransactionLifecycle(
+      { wire: "tx1", lastValidBlockHeight: 200 },
+      {
+        pollIntervalMs: 100,
+        rebroadcastIntervalMs: 200,
+        timeoutMs: 1000,
+      },
+      deps
+    );
+
+    expect(result.signature).toBe("sig-tx1");
+    expect(result.status.confirmationStatus).toBe("confirmed");
+  });
+
+  it("uses injectable clock for rebroadcast timing", async () => {
+    const { deps, clock } = createMockDeps({
+      getBlockHeight: async () => 100,
+    });
+
+    const promise = runTransactionLifecycle(
+      { wire: "tx1", lastValidBlockHeight: 200 },
+      {
+        pollIntervalMs: 100,
+        rebroadcastIntervalMs: 200,
+        timeoutMs: 500,
+      },
+      deps
+    );
+
+    await expect(promise).rejects.toThrow(TransactionTimedOutError);
+
+    const sleeps = (clock as any).getSleeps();
+    expect(sleeps).toContain(100);
+  });
 });
 

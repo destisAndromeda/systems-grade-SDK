@@ -3,10 +3,12 @@
  */
 
 import { describe, it, expect } from "vitest";
+import { deriveSignatureFromWire } from "../../src/tx/lifecycle.js";
 import {
   fetchTransactionStatus,
   isTerminalStatus,
   pollTransactionConfirmation,
+  confirmWithRebroadcast,
 } from "../../src/tx/confirm.js";
 import { createFakeRpcTransport } from "../../src/testing/fake-transport.js";
 import { FakeClock } from "../../src/testing/fake-clock.js";
@@ -836,5 +838,235 @@ describe("pollTransactionConfirmation", () => {
     // Should complete instantly with fake clock
     expect(endRealTime - startRealTime).toBeLessThan(100);
     expect(isOk(result)).toBe(true);
+  });
+});
+
+describe("confirmWithRebroadcast", () => {
+  const dummySignatureBytes = new Uint8Array(64);
+  const validWireBytes = new Uint8Array(65);
+  validWireBytes[0] = 1;
+  validWireBytes.set(dummySignatureBytes, 1);
+  const validWireBase64 = Buffer.from(validWireBytes).toString("base64");
+  const expectedSig = deriveSignatureFromWire(validWireBase64);
+
+  it("confirmWithRebroadcast delegates to lifecycle or shares lifecycle helpers", async () => {
+    let getStatusesCallCount = 0;
+    const transport = createFakeRpcTransport({
+      endpointUrl: "https://api.test",
+      endpointId: "test",
+      responses: new Map([
+        ["sendTransaction", { success: expectedSig }],
+        ["getBlockHeight", { success: 100 }],
+      ]),
+    });
+
+    const originalSend = transport.send;
+    transport.send = (async function (method: string, params: any) {
+      if (method === "getSignatureStatuses") {
+        getStatusesCallCount++;
+        if (getStatusesCallCount === 1) {
+          return { value: [null] };
+        } else {
+          return { value: [{ confirmationStatus: "confirmed", slot: 100, err: null }] };
+        }
+      }
+      return originalSend.call(transport, method, params);
+    } as any);
+
+    const clock = {
+      currentTime: 0,
+      now() {
+        return this.currentTime;
+      },
+      async sleep(ms: number) {
+        this.currentTime += ms;
+      },
+    };
+
+    const resultPromise = confirmWithRebroadcast(
+      transport,
+      validWireBase64,
+      {
+        lastValidBlockHeight: 150,
+        pollIntervalMs: 100,
+        rebroadcastIntervalMs: 200,
+        timeoutMs: 500,
+      },
+      { clock }
+    );
+
+    const result = await resultPromise;
+    expect(isOk(result)).toBe(true);
+    if (isOk(result)) {
+      expect(result.value.signature).toBe(expectedSig);
+      expect(result.value.status.confirmationStatus).toBe("confirmed");
+    }
+    expect(getStatusesCallCount).toBe(2);
+  });
+
+  it("confirmWithRebroadcast does not implement a conflicting single-signature algorithm", async () => {
+    let getStatusesCalls: any[] = [];
+    const transport = createFakeRpcTransport({
+      endpointUrl: "https://api.test",
+      endpointId: "test",
+      responses: new Map([
+        ["sendTransaction", { success: expectedSig }],
+      ]),
+    });
+
+    let heightCalls = 0;
+    let submitCallsCount = 0;
+    transport.send = (async function (method: string, params: any) {
+      if (method === "getBlockHeight") {
+        heightCalls++;
+        return heightCalls >= 2 ? 101 : 100;
+      }
+      if (method === "getSignatureStatuses") {
+        getStatusesCalls.push(params);
+        return { value: params[0].map(() => null) };
+      }
+      if (method === "sendTransaction") {
+        submitCallsCount++;
+        return submitCallsCount === 1 ? expectedSig : "sig-resigned";
+      }
+      return null;
+    } as any);
+
+    const clock = {
+      currentTime: 0,
+      now() {
+        return this.currentTime;
+      },
+      async sleep(ms: number) {
+        this.currentTime += ms;
+      },
+    };
+
+    const resign = async (previous: any, attempt: number) => {
+      return {
+        wire: "wire-resigned",
+        signature: "sig-resigned",
+        lastValidBlockHeight: 200,
+      };
+    };
+
+    const resultPromise = confirmWithRebroadcast(
+      transport,
+      validWireBase64,
+      {
+        lastValidBlockHeight: 100,
+        pollIntervalMs: 100,
+        rebroadcastIntervalMs: 200,
+        deathGraceMs: 50,
+        timeoutMs: 500,
+        resignOnExpiry: true,
+        maxResignatures: 1,
+      },
+      { clock, resign }
+    );
+
+    const result = await resultPromise;
+    expect(isOk(result)).toBe(false);
+    
+    const lastCallParams = getStatusesCalls[getStatusesCalls.length - 1];
+    expect(lastCallParams[0]).toEqual([expectedSig, "sig-resigned"]);
+  });
+
+  it("confirmWithRebroadcast preserves public result shape", async () => {
+    const transport = createFakeRpcTransport({
+      endpointUrl: "https://api.test",
+      endpointId: "test",
+      responses: new Map([
+        ["sendTransaction", { success: expectedSig }],
+        ["getBlockHeight", { success: 100 }],
+        ["getSignatureStatuses", { success: { value: [{ confirmationStatus: "confirmed", slot: 100, err: null }] } }],
+      ]),
+    });
+
+    const clock = {
+      currentTime: 0,
+      now() {
+        return this.currentTime;
+      },
+      async sleep(ms: number) {
+        this.currentTime += ms;
+      },
+    };
+
+    const result = await confirmWithRebroadcast(
+      transport,
+      validWireBase64,
+      {
+        lastValidBlockHeight: 150,
+        pollIntervalMs: 100,
+        rebroadcastIntervalMs: 200,
+        timeoutMs: 500,
+      },
+      { clock }
+    );
+
+    expect(isOk(result)).toBe(true);
+    if (isOk(result)) {
+      expect(result.value).toHaveProperty("signature");
+      expect(result.value).toHaveProperty("status");
+      expect(result.value).toHaveProperty("tracked");
+      expect(result.value.signature).toBe(expectedSig);
+      expect(result.value.status.confirmationStatus).toBe("confirmed");
+      expect(result.value.tracked[0]!.signature).toBe(expectedSig);
+    }
+  });
+
+  it("confirmWithRebroadcast treats AlreadyProcessed as non-fatal", async () => {
+    let submitCount = 0;
+    const transport = createFakeRpcTransport({
+      endpointUrl: "https://api.test",
+      endpointId: "test",
+      responses: new Map([
+        ["getBlockHeight", { success: 100 }],
+        ["getSignatureStatuses", { success: { value: [{ confirmationStatus: "confirmed", slot: 100, err: null }] } }],
+      ]),
+    });
+
+    transport.send = (async function (method: string, params: any) {
+      if (method === "sendTransaction") {
+        submitCount++;
+        throw new Error("already processed");
+      }
+      if (method === "getBlockHeight") {
+        return 100;
+      }
+      if (method === "getSignatureStatuses") {
+        return { value: [{ confirmationStatus: "confirmed", slot: 100, err: null }] };
+      }
+      return null;
+    } as any);
+
+    const clock = {
+      currentTime: 0,
+      now() {
+        return this.currentTime;
+      },
+      async sleep(ms: number) {
+        this.currentTime += ms;
+      },
+    };
+
+    const result = await confirmWithRebroadcast(
+      transport,
+      validWireBase64,
+      {
+        lastValidBlockHeight: 150,
+        pollIntervalMs: 100,
+        rebroadcastIntervalMs: 200,
+        timeoutMs: 500,
+      },
+      { clock }
+    );
+
+    expect(isOk(result)).toBe(true);
+    if (isOk(result)) {
+      expect(result.value.signature).toBe(expectedSig);
+      expect(result.value.status.confirmationStatus).toBe("confirmed");
+    }
   });
 });
