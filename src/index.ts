@@ -95,6 +95,9 @@ export type {
   LifecycleClock,
   TrackedTransaction,
   SendWithPreflightGuardOptions,
+  TransactionStatus,
+  TransactionLifecycleResult,
+  TransactionLifecycleDeps,
 } from "./tx/types.js";
 export {
   TransactionExpiredError,
@@ -117,6 +120,8 @@ export {
 export {
   isAlreadyProcessed,
   deriveSignatureFromWire,
+  findLanded,
+  runTransactionLifecycle,
 } from "./tx/lifecycle.js";
 
 // Relay

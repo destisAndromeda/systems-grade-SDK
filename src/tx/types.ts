@@ -117,3 +117,49 @@ export class TransactionTimedOutError extends Error {
     this.name = "TransactionTimedOutError";
   }
 }
+
+/**
+ * Minimal transaction status type for the lifecycle engine.
+ */
+export interface TransactionStatus {
+  confirmationStatus?: "processed" | "confirmed" | "finalized";
+  err?: unknown;
+  slot?: number;
+}
+
+/**
+ * Result of the transaction lifecycle.
+ */
+export interface TransactionLifecycleResult {
+  signature: string;
+  status: TransactionStatus;
+  tracked: TrackedTransaction[];
+}
+
+/**
+ * Dependencies for the transaction lifecycle.
+ */
+export interface TransactionLifecycleDeps {
+  clock: LifecycleClock;
+
+  submit(wire: string): Promise<string>;
+
+  getStatuses(
+    signatures: string[],
+    searchTransactionHistory: boolean,
+  ): Promise<Array<TransactionStatus | null>>;
+
+  getBlockHeight(): Promise<number>;
+
+  resign?(
+    previous: TrackedTransaction,
+    attempt: number,
+  ): Promise<{
+    wire: string;
+    signature?: string;
+    lastValidBlockHeight: number;
+  }>;
+
+  deriveSignatureFromWire(wire: string): string;
+}
+

@@ -7,6 +7,14 @@
  */
 
 import { getBase58Decoder } from "@solana/codecs-strings";
+import type {
+  TransactionLifecycleDeps,
+  TransactionLifecycleResult,
+  TrackedTransaction,
+  TransactionStatus,
+} from "./types.js";
+import { TransactionExpiredError, TransactionTimedOutError } from "./types.js";
+
 
 // ---------------------------------------------------------------------------
 // isAlreadyProcessed
@@ -143,3 +151,170 @@ function decodeCompactU16(
 
   throw new Error("Malformed compact-u16: too many continuation bytes");
 }
+
+/**
+ * Find if any tracked transaction has landed.
+ *
+ * @param tracked List of tracked transactions
+ * @param statuses List of corresponding transaction statuses
+ */
+export function findLanded(
+  tracked: TrackedTransaction[],
+  statuses: Array<TransactionStatus | null>,
+): TransactionLifecycleResult | undefined {
+  for (let i = 0; i < statuses.length; i++) {
+    const status = statuses[i];
+    if (status) {
+      const isErrFree = status.err === null || status.err === undefined;
+      const hasConfirmationStatus = status.confirmationStatus !== undefined;
+      if (isErrFree && (hasConfirmationStatus || status.slot !== undefined || Object.keys(status).length > 0)) {
+        return {
+          signature: tracked[i]!.signature,
+          status,
+          tracked: [...tracked],
+        };
+      }
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Run correctness-critical transaction lifecycle.
+ */
+export async function runTransactionLifecycle(
+  initial: {
+    wire: string;
+    signature?: string;
+    lastValidBlockHeight: number;
+  },
+  options: {
+    pollIntervalMs?: number;
+    rebroadcastIntervalMs?: number;
+    deathGraceMs?: number;
+    timeoutMs?: number;
+    resignOnExpiry?: boolean;
+    maxResignatures?: number;
+  },
+  deps: TransactionLifecycleDeps,
+): Promise<TransactionLifecycleResult> {
+  const pollIntervalMs = options.pollIntervalMs ?? 2_000;
+  const rebroadcastIntervalMs = options.rebroadcastIntervalMs ?? 2_000; // accepted but unused for now
+  const deathGraceMs = options.deathGraceMs ?? 1_000;
+  const timeoutMs = options.timeoutMs;
+  const resignOnExpiry = options.resignOnExpiry ?? false;
+  const maxResignatures = options.maxResignatures ?? 0;
+
+  const startedAt = deps.clock.now();
+  const tracked: TrackedTransaction[] = [];
+  let resignAttempt = 0;
+
+  // Submit and track the initial transaction
+  await submitAndTrack(initial);
+
+  async function submitAndTrack(input: {
+    wire: string;
+    signature?: string;
+    lastValidBlockHeight: number;
+  }): Promise<void> {
+    let signature = input.signature;
+    if (!signature) {
+      signature = deps.deriveSignatureFromWire(input.wire);
+    }
+
+    try {
+      const submittedSignature = await deps.submit(input.wire);
+      signature = submittedSignature || signature;
+    } catch (err) {
+      if (isAlreadyProcessed(err)) {
+        signature = deps.deriveSignatureFromWire(input.wire);
+      } else {
+        throw err;
+      }
+    }
+
+    const exists = tracked.some((t) => t.signature === signature);
+    if (!exists) {
+      tracked.push({
+        signature,
+        wire: input.wire,
+        lastValidBlockHeight: input.lastValidBlockHeight,
+      });
+    }
+  }
+
+  function isTimedOut(): boolean {
+    if (timeoutMs === undefined) return false;
+    return (deps.clock.now() - startedAt) >= timeoutMs;
+  }
+
+  while (true) {
+    // 1. Check timeout
+    if (isTimedOut()) {
+      const finalSweep = await deps.getStatuses(
+        tracked.map((t) => t.signature),
+        true,
+      );
+      const landed = findLanded(tracked, finalSweep);
+      if (landed) return landed;
+      throw new TransactionTimedOutError(tracked.map((t) => t.signature));
+    }
+
+    // 2. Poll statuses (normal check)
+    const statuses = await deps.getStatuses(
+      tracked.map((t) => t.signature),
+      false,
+    );
+    const landed = findLanded(tracked, statuses);
+    if (landed) return landed;
+
+    // 3. Check block height / expiry
+    const currentBlockHeight = await deps.getBlockHeight();
+    const latestTracked = tracked[tracked.length - 1]!;
+
+    if (currentBlockHeight > latestTracked.lastValidBlockHeight) {
+      // Expiry triggered, run verified death
+      const signatures = tracked.map((t) => t.signature);
+      const sweep1 = await deps.getStatuses(signatures, true);
+      const landed1 = findLanded(tracked, sweep1);
+      if (landed1) return landed1;
+
+      // Sleep death grace using the injectable clock
+      await deps.clock.sleep(deathGraceMs);
+
+      // Check timeout again after sleep in case it occurred during the sleep
+      if (isTimedOut()) {
+        const finalSweep = await deps.getStatuses(
+          tracked.map((t) => t.signature),
+          true,
+        );
+        const landed = findLanded(tracked, finalSweep);
+        if (landed) return landed;
+        throw new TransactionTimedOutError(tracked.map((t) => t.signature));
+      }
+
+      const sweep2 = await deps.getStatuses(signatures, true);
+      const landed2 = findLanded(tracked, sweep2);
+      if (landed2) return landed2;
+
+      // Death verified. Now either resign or throw expiry error
+      // Check timeout first before resigning/throwing expiry
+      if (isTimedOut()) {
+        throw new TransactionTimedOutError(tracked.map((t) => t.signature));
+      }
+
+      if (resignOnExpiry && deps.resign && resignAttempt < maxResignatures) {
+        resignAttempt++;
+        const resigned = await deps.resign(latestTracked, resignAttempt);
+        await submitAndTrack(resigned);
+        continue;
+      } else {
+        throw new TransactionExpiredError(tracked.map((t) => t.signature));
+      }
+    }
+
+    // 4. Sleep pollIntervalMs
+    await deps.clock.sleep(pollIntervalMs);
+  }
+}
+

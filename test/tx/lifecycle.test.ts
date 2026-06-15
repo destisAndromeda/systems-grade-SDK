@@ -8,6 +8,13 @@ import {
   TransactionTimedOutError,
   isAlreadyProcessed,
   deriveSignatureFromWire,
+  runTransactionLifecycle,
+} from "../../src/index.js";
+import type {
+  LifecycleClock,
+  TransactionLifecycleDeps,
+  TransactionStatus,
+  TrackedTransaction,
 } from "../../src/index.js";
 import { getBase58Decoder } from "@solana/codecs-strings";
 
@@ -113,3 +120,454 @@ describe("deriveSignatureFromWire", () => {
     expect(() => deriveSignatureFromWire(multiByteWire)).toThrow("Transaction wire too short");
   });
 });
+
+describe("runTransactionLifecycle", () => {
+  // Fake clock implementation helper
+  function createFakeClock(start = 0): LifecycleClock {
+    let now = start;
+    const sleeps: number[] = [];
+
+    return {
+      now: () => now,
+      sleep: async (ms: number) => {
+        sleeps.push(ms);
+        now += ms;
+      },
+      getSleeps: () => sleeps,
+    } as any;
+  }
+
+  interface MockDepsOptions {
+    submit?: (wire: string) => Promise<string>;
+    getStatuses?: (signatures: string[], searchTransactionHistory: boolean) => Promise<Array<TransactionStatus | null>>;
+    getBlockHeight?: () => Promise<number>;
+    resign?: (previous: TrackedTransaction, attempt: number) => Promise<{ wire: string; signature?: string; lastValidBlockHeight: number }>;
+    deriveSignatureFromWire?: (wire: string) => string;
+  }
+
+  function createMockDeps(options: MockDepsOptions = {}, startClock = 0) {
+    const clock = createFakeClock(startClock);
+    const getStatusesCalls: Array<{ signatures: string[]; searchTransactionHistory: boolean }> = [];
+    const submitCalls: string[] = [];
+    const resignCalls: Array<{ previous: TrackedTransaction; attempt: number }> = [];
+
+    const deps: TransactionLifecycleDeps = {
+      clock,
+      submit: async (wire) => {
+        submitCalls.push(wire);
+        if (options.submit) return options.submit(wire);
+        return `sig-${wire}`;
+      },
+      getStatuses: async (signatures, searchTransactionHistory) => {
+        getStatusesCalls.push({ signatures: [...signatures], searchTransactionHistory });
+        if (options.getStatuses) return options.getStatuses(signatures, searchTransactionHistory);
+        return signatures.map(() => null);
+      },
+      getBlockHeight: async () => {
+        if (options.getBlockHeight) return options.getBlockHeight();
+        return 100;
+      },
+      deriveSignatureFromWire: (wire) => {
+        if (options.deriveSignatureFromWire) return options.deriveSignatureFromWire(wire);
+        return `sig-${wire}`;
+      },
+    };
+
+    if (options.resign) {
+      deps.resign = async (previous, attempt) => {
+        resignCalls.push({ previous, attempt });
+        return options.resign!(previous, attempt);
+      };
+    }
+
+    return {
+      deps,
+      clock,
+      getStatusesCalls,
+      submitCalls,
+      resignCalls,
+    };
+  }
+
+  it("tracks all signatures across resign epochs", async () => {
+    let currentHeight = 100;
+    const { deps, getStatusesCalls } = createMockDeps({
+      getBlockHeight: async () => currentHeight,
+      resign: async (previous, attempt) => {
+        if (attempt === 1) {
+          return { wire: "tx2", lastValidBlockHeight: 200 };
+        } else {
+          return { wire: "tx3", lastValidBlockHeight: 300 };
+        }
+      },
+    });
+
+    let callCount = 0;
+    deps.getBlockHeight = async () => {
+      callCount++;
+      if (callCount === 1) {
+        return 100;
+      } else if (callCount === 2) {
+        return 101;
+      } else if (callCount === 3) {
+        return 200;
+      } else if (callCount === 4) {
+        return 201;
+      } else {
+        return 301;
+      }
+    };
+
+    const promise = runTransactionLifecycle(
+      { wire: "tx1", lastValidBlockHeight: 100 },
+      {
+        pollIntervalMs: 10,
+        deathGraceMs: 5,
+        resignOnExpiry: true,
+        maxResignatures: 2,
+      },
+      deps
+    );
+
+    await expect(promise).rejects.toThrow(TransactionExpiredError);
+
+    const searchTrueCalls = getStatusesCalls.filter(c => c.searchTransactionHistory);
+    expect(searchTrueCalls.length).toBe(6);
+    expect(searchTrueCalls[0]!.signatures).toEqual(["sig-tx1"]);
+    expect(searchTrueCalls[1]!.signatures).toEqual(["sig-tx1"]);
+    expect(searchTrueCalls[2]!.signatures).toEqual(["sig-tx1", "sig-tx2"]);
+    expect(searchTrueCalls[3]!.signatures).toEqual(["sig-tx1", "sig-tx2"]);
+    expect(searchTrueCalls[4]!.signatures).toEqual(["sig-tx1", "sig-tx2", "sig-tx3"]);
+    expect(searchTrueCalls[5]!.signatures).toEqual(["sig-tx1", "sig-tx2", "sig-tx3"]);
+  });
+
+  it("returns landed result if any previous signature lands", async () => {
+    let currentHeight = 100;
+    const { deps } = createMockDeps({
+      getBlockHeight: async () => currentHeight,
+      resign: async () => ({ wire: "tx2", lastValidBlockHeight: 200 }),
+      getStatuses: async (sigs) => {
+        if (sigs.includes("sig-tx2")) {
+          return [
+            { confirmationStatus: "confirmed", slot: 42 },
+            null
+          ];
+        }
+        return [null];
+      }
+    });
+
+    let heightCalls = 0;
+    deps.getBlockHeight = async () => {
+      heightCalls++;
+      if (heightCalls === 1) return 100;
+      return 101;
+    };
+
+    const result = await runTransactionLifecycle(
+      { wire: "tx1", lastValidBlockHeight: 100 },
+      {
+        pollIntervalMs: 10,
+        deathGraceMs: 5,
+        resignOnExpiry: true,
+        maxResignatures: 1,
+      },
+      deps
+    );
+
+    expect(result.signature).toBe("sig-tx1");
+    expect(result.status.confirmationStatus).toBe("confirmed");
+    expect(result.status.slot).toBe(42);
+    expect(result.tracked.map(t => t.signature)).toEqual(["sig-tx1", "sig-tx2"]);
+  });
+
+  it("does not resign until verified death passes two history sweeps", async () => {
+    let currentHeight = 101;
+    let resignCalled = false;
+    const { deps, getStatusesCalls, clock } = createMockDeps({
+      getBlockHeight: async () => currentHeight,
+      resign: async () => {
+        resignCalled = true;
+        return { wire: "tx2", lastValidBlockHeight: 200 };
+      },
+      getStatuses: async (sigs) => {
+        if (sigs.includes("sig-tx2")) {
+          return [null, { confirmationStatus: "finalized", slot: 100 }];
+        }
+        return sigs.map(() => null);
+      },
+    });
+
+    const promise = runTransactionLifecycle(
+      { wire: "tx1", lastValidBlockHeight: 100 },
+      {
+        pollIntervalMs: 10,
+        deathGraceMs: 100,
+        resignOnExpiry: true,
+        maxResignatures: 1,
+      },
+      deps
+    );
+
+    const result = await promise;
+    expect(resignCalled).toBe(true);
+
+    const sweepCalls = getStatusesCalls.filter(c => c.searchTransactionHistory);
+    expect(sweepCalls.length).toBe(2);
+    expect(sweepCalls[0]!.signatures).toEqual(["sig-tx1"]);
+    expect(sweepCalls[1]!.signatures).toEqual(["sig-tx1"]);
+    const sleeps = (clock as any).getSleeps();
+    expect(sleeps).toContain(100);
+  });
+
+  it("does not resign when first death sweep finds landed transaction", async () => {
+    let currentHeight = 101;
+    let resignCalled = false;
+    const { deps } = createMockDeps({
+      getBlockHeight: async () => currentHeight,
+      resign: async () => {
+        resignCalled = true;
+        return { wire: "tx2", lastValidBlockHeight: 200 };
+      },
+      getStatuses: async (sigs, search) => {
+        if (search) {
+          return [{ confirmationStatus: "confirmed", slot: 50 }];
+        }
+        return [null];
+      }
+    });
+
+    const result = await runTransactionLifecycle(
+      { wire: "tx1", lastValidBlockHeight: 100 },
+      {
+        pollIntervalMs: 10,
+        deathGraceMs: 50,
+        resignOnExpiry: true,
+        maxResignatures: 1,
+      },
+      deps
+    );
+
+    expect(resignCalled).toBe(false);
+    expect(result.signature).toBe("sig-tx1");
+    expect(result.status.confirmationStatus).toBe("confirmed");
+  });
+
+  it("does not resign when second death sweep finds landed transaction", async () => {
+    let currentHeight = 101;
+    let resignCalled = false;
+    let sweepCount = 0;
+    const { deps } = createMockDeps({
+      getBlockHeight: async () => currentHeight,
+      resign: async () => {
+        resignCalled = true;
+        return { wire: "tx2", lastValidBlockHeight: 200 };
+      },
+      getStatuses: async (sigs, search) => {
+        if (search) {
+          sweepCount++;
+          if (sweepCount === 2) {
+            return [{ confirmationStatus: "confirmed", slot: 55 }];
+          }
+        }
+        return [null];
+      }
+    });
+
+    const result = await runTransactionLifecycle(
+      { wire: "tx1", lastValidBlockHeight: 100 },
+      {
+        pollIntervalMs: 10,
+        deathGraceMs: 50,
+        resignOnExpiry: true,
+        maxResignatures: 1,
+      },
+      deps
+    );
+
+    expect(resignCalled).toBe(false);
+    expect(result.signature).toBe("sig-tx1");
+    expect(result.status.confirmationStatus).toBe("confirmed");
+  });
+
+  it("throws TransactionExpiredError only after verified death", async () => {
+    let currentHeight = 101;
+    const { deps } = createMockDeps({
+      getBlockHeight: async () => currentHeight,
+    });
+
+    const promise = runTransactionLifecycle(
+      { wire: "tx1", lastValidBlockHeight: 100 },
+      {
+        pollIntervalMs: 10,
+        deathGraceMs: 50,
+        resignOnExpiry: false,
+      },
+      deps
+    );
+
+    await expect(promise).rejects.toThrow(TransactionExpiredError);
+  });
+
+  it("throws TransactionTimedOutError on timeout after final sweep", async () => {
+    let now = 0;
+    const sleeps: number[] = [];
+    const clock: LifecycleClock = {
+      now: () => now,
+      sleep: async (ms) => {
+        sleeps.push(ms);
+        now += ms;
+      },
+    };
+
+    let resignCalled = false;
+    const { deps } = createMockDeps({
+      resign: async () => {
+        resignCalled = true;
+        return { wire: "tx2", lastValidBlockHeight: 200 };
+      }
+    });
+    deps.clock = clock;
+
+    const promise = runTransactionLifecycle(
+      { wire: "tx1", lastValidBlockHeight: 100 },
+      {
+        pollIntervalMs: 2000,
+        timeoutMs: 5000,
+        resignOnExpiry: true,
+        maxResignatures: 1,
+      },
+      deps
+    );
+
+    await expect(promise).rejects.toThrow(TransactionTimedOutError);
+    expect(resignCalled).toBe(false);
+  });
+
+  it("returns landed result if final timeout sweep finds landed transaction", async () => {
+    let now = 0;
+    const sleeps: number[] = [];
+    const clock: LifecycleClock = {
+      now: () => now,
+      sleep: async (ms) => {
+        sleeps.push(ms);
+        now += ms;
+      },
+    };
+
+    const { deps } = createMockDeps({
+      getStatuses: async (sigs, search) => {
+        if (search) {
+          return [{ confirmationStatus: "confirmed", slot: 88 }];
+        }
+        return [null];
+      }
+    });
+    deps.clock = clock;
+
+    const result = await runTransactionLifecycle(
+      { wire: "tx1", lastValidBlockHeight: 100 },
+      {
+        pollIntervalMs: 2000,
+        timeoutMs: 5000,
+      },
+      deps
+    );
+
+    expect(result.signature).toBe("sig-tx1");
+    expect(result.status.confirmationStatus).toBe("confirmed");
+    expect(result.status.slot).toBe(88);
+  });
+
+  it("treats AlreadyProcessed as submitted and continues polling", async () => {
+    let submitCalledCount = 0;
+    const { deps } = createMockDeps({
+      submit: async () => {
+        submitCalledCount++;
+        throw new Error("This transaction has already been processed");
+      },
+      getStatuses: async () => {
+        return [{ confirmationStatus: "finalized", slot: 123 }];
+      }
+    });
+
+    const result = await runTransactionLifecycle(
+      { wire: "tx1", lastValidBlockHeight: 100 },
+      {
+        pollIntervalMs: 10,
+      },
+      deps
+    );
+
+    expect(submitCalledCount).toBe(1);
+    expect(result.signature).toBe("sig-tx1");
+    expect(result.status.confirmationStatus).toBe("finalized");
+  });
+
+  it("uses injectable clock for all sleeps", async () => {
+    let currentHeight = 100;
+    const { deps, clock } = createMockDeps({
+      getBlockHeight: async () => currentHeight,
+    });
+
+    let heightCalls = 0;
+    deps.getBlockHeight = async () => {
+      heightCalls++;
+      if (heightCalls === 1) return 100;
+      return 101;
+    };
+
+    const promise = runTransactionLifecycle(
+      { wire: "tx1", lastValidBlockHeight: 100 },
+      {
+        pollIntervalMs: 2000,
+        deathGraceMs: 1000,
+        resignOnExpiry: false,
+      },
+      deps
+    );
+
+    await expect(promise).rejects.toThrow(TransactionExpiredError);
+    const sleeps = (clock as any).getSleeps();
+    expect(sleeps).toEqual([2000, 1000]);
+  });
+
+  it("does not drop old signatures after resign", async () => {
+    let currentHeight = 100;
+    const { deps, getStatusesCalls } = createMockDeps({
+      getBlockHeight: async () => currentHeight,
+      resign: async (previous, attempt) => {
+        if (attempt === 1) return { wire: "tx2", lastValidBlockHeight: 200 };
+        return { wire: "tx3", lastValidBlockHeight: 300 };
+      }
+    });
+
+    let heightCalls = 0;
+    deps.getBlockHeight = async () => {
+      heightCalls++;
+      if (heightCalls === 1) return 100;
+      if (heightCalls === 2) return 101;
+      if (heightCalls === 3) return 200;
+      if (heightCalls === 4) return 201;
+      return 301;
+    };
+
+    const promise = runTransactionLifecycle(
+      { wire: "tx1", lastValidBlockHeight: 100 },
+      {
+        pollIntervalMs: 10,
+        deathGraceMs: 5,
+        resignOnExpiry: true,
+        maxResignatures: 2,
+      },
+      deps
+    );
+
+    await expect(promise).rejects.toThrow(TransactionExpiredError);
+
+    const lastCall = getStatusesCalls[getStatusesCalls.length - 1];
+    expect(lastCall).toBeDefined();
+    expect(lastCall!.signatures).toEqual(["sig-tx1", "sig-tx2", "sig-tx3"]);
+  });
+});
+
