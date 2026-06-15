@@ -235,4 +235,58 @@ describe("createHttpRpcTransport", () => {
     const headers = call![1]!.headers as Record<string, string>;
     expect(headers["Content-Type"]).toBe("application/json");
   });
+
+  it("throws InvalidResponse when JSON body is not an object (e.g. a number)", async () => {
+    // Covers line 82: jsonRpcResponse is not an object
+    fetchStub.mockResolvedValueOnce({
+      status: 200,
+      json: async () => 42,
+    });
+
+    const transport = createHttpRpcTransport({
+      endpointUrl: "https://api.solana.com",
+      endpointId: "solana-rpc",
+    });
+
+    await expect(transport.send("getBalance", {})).rejects.toMatchObject({
+      kind: "InvalidResponse",
+      retryable: false,
+    });
+  });
+
+  it("throws InvalidResponse when response has neither result nor error", async () => {
+    // Covers line 102: valid JSON object with no result/error keys
+    fetchStub.mockResolvedValueOnce({
+      status: 200,
+      json: async () => ({ jsonrpc: "2.0", id: 1 }),
+    });
+
+    const transport = createHttpRpcTransport({
+      endpointUrl: "https://api.solana.com",
+      endpointId: "solana-rpc",
+    });
+
+    await expect(transport.send("getBalance", {})).rejects.toMatchObject({
+      kind: "InvalidResponse",
+      retryable: false,
+    });
+  });
+
+  it("throws Unknown (non-retryable) on HTTP 403", async () => {
+    fetchStub.mockResolvedValueOnce({
+      status: 403,
+      statusText: "Forbidden",
+      json: async () => ({}),
+    });
+
+    const transport = createHttpRpcTransport({
+      endpointUrl: "https://api.solana.com",
+      endpointId: "solana-rpc",
+    });
+
+    await expect(transport.send("getBalance", {})).rejects.toMatchObject({
+      kind: "Unknown",
+      retryable: false,
+    });
+  });
 });

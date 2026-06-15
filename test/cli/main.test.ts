@@ -62,4 +62,54 @@ describe("CLI Commander Main Entrypoint", () => {
     spy.mockRestore();
     consoleSpy.mockRestore();
   });
+
+  it("health command with --watch calls watchHealth", async () => {
+    const spy = vi.spyOn(healthModule, "watchHealth").mockResolvedValue(undefined);
+
+    const program = createCli();
+    await program.parseAsync([
+      "node",
+      "solana-sdk",
+      "health",
+      "https://api.test",
+      "--watch",
+      "--interval-ms",
+      "1000",
+      "--iterations",
+      "5",
+    ]);
+
+    expect(spy).toHaveBeenCalledWith(
+      ["https://api.test"],
+      expect.objectContaining({
+        intervalMs: 1000,
+        iterations: 5,
+      }),
+    );
+
+    spy.mockRestore();
+  });
+
+  it("status command with endpoint calls createTransactionStatusReport", async () => {
+    const spy = vi.spyOn(statusModule, "createTransactionStatusReport").mockResolvedValue("mocked status report");
+    const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    const program = createCli();
+    await program.parseAsync([
+      "node",
+      "solana-sdk",
+      "status",
+      "some-signature",
+      "--endpoint",
+      "https://api.test",
+    ]);
+
+    expect(spy).toHaveBeenCalledWith("some-signature", "https://api.test");
+    expect(consoleSpy).toHaveBeenCalledWith("mocked status report");
+
+    spy.mockRestore();
+    consoleSpy.mockRestore();
+  });
+
 });
+

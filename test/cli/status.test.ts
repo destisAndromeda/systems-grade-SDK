@@ -2,7 +2,7 @@
  * Tests for CLI status command.
  */
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import {
   formatTransactionStatus,
   createTransactionStatusReport,
@@ -60,6 +60,15 @@ describe("formatTransactionStatus", () => {
     const result = formatTransactionStatus("sig123", err(sdkError));
     expect(result).toContain("Error fetching transaction status for sig123");
     expect(result).toContain("connection refused");
+  });
+
+  it("renders unknown status kind via exhaustive default branch", () => {
+    // Cast through unknown to simulate an unexpected runtime status kind
+    const result = formatTransactionStatus(
+      "sig-unknown",
+      ok({ kind: "unexpected-kind" } as unknown as ReturnType<typeof ok>["value"]),
+    );
+    expect(result).toContain("unknown status");
   });
 });
 
@@ -222,5 +231,36 @@ describe("createTransactionStatusReport", () => {
 
     expect(result).toContain("Error fetching transaction status");
     expect(result).toContain("timeout");
+  });
+
+  it("returns error when endpointUrl is syntactically invalid (no injected transport)", async () => {
+    // Covers src/cli/status.ts line 117 — normalizeRpcEndpointConfig fails
+    const result = await createTransactionStatusReport(
+      "5test1SignatureBase58Placeholder",
+      "not-a-valid-url",
+    );
+    expect(result).toMatch(/Error.*Invalid.*endpoint/i);
+  });
+
+  it("falls back to real HTTP transport for valid URL but mocks fetch", async () => {
+    // Covers lines 120-124 — createHttpRpcTransport is created for a valid URL
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn().mockImplementation(async () => ({
+      ok: false,
+      status: 500,
+      statusText: "Internal Server Error",
+      json: async () => ({}),
+    }));
+
+    try {
+      const result = await createTransactionStatusReport(
+        "5test1SignatureBase58Placeholder",
+        "https://api.mainnet-beta.solana.com",
+      );
+      // The transport will throw due to HTTP 500; the formatter wraps it
+      expect(result).toContain("Error fetching transaction status");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 });

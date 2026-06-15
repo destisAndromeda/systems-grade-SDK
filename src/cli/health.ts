@@ -113,12 +113,22 @@ export async function createHealthReport(
 
   for (const endpoint of endpoints) {
     const id = endpoint.replace(/[^a-zA-Z0-9]/g, "_");
-    let transport: RpcTransport;
-    if (deps?.transports && deps.transports.has(id)) {
-      transport = deps.transports.get(id)!;
-    } else if (deps?.transports && deps.transports.has(endpoint)) {
-      transport = deps.transports.get(endpoint)!;
-    } else {
+    let transport: RpcTransport | undefined;
+    if (deps?.transports) {
+      transport = deps.transports.get(id) ?? deps.transports.get(endpoint);
+      if (!transport) {
+        const cleanEndpoint = endpoint.toLowerCase().replace(/[^a-z0-9]/g, "");
+        for (const [key, val] of deps.transports.entries()) {
+          const cleanKey = key.toLowerCase().replace(/[^a-z0-9]/g, "");
+          if (cleanKey === cleanEndpoint) {
+            transport = val;
+            break;
+          }
+        }
+      }
+    }
+
+    if (!transport) {
       transport = createHttpRpcTransport({
         endpointUrl: endpoint,
         endpointId: id,

@@ -216,4 +216,35 @@ describe("Datadog metrics exporter", () => {
     expect(typeof index.sendDatadogMetrics).toBe("function");
     expect(typeof index.mapMetricEventToDatadogPayload).toBe("function");
   });
+
+  // ─── Test 5: fetch throws ─────────────────────────────────────────────
+
+  it("sendDatadogMetrics returns err when fetch throws", async () => {
+    const throwingFetch: typeof fetch = () => Promise.reject(new Error("Network down"));
+
+    const payload = mapMetricEventToDatadogPayload(
+      makeEvent(),
+      { service: "test" },
+      () => Date.now(),
+    );
+
+    const result = await sendDatadogMetrics(
+      payload,
+      { apiKey: "test-key", endpoint: "https://api.datadoghq.com" },
+      { fetch: throwingFetch },
+    );
+
+    expect(isOk(result)).toBe(false);
+    if (!isOk(result)) {
+      expect(result.error.message).toContain("Datadog fetch failed");
+    }
+  });
+
+  // ─── Test 6: unknown metric type mapping ──────────────────────────────
+
+  it("mapMetricEventToDatadogPayload handles unknown metric type with fallback name", () => {
+    const event = makeEvent({ type: "custom_event_type" });
+    const payload = mapMetricEventToDatadogPayload(event, {}, () => 0);
+    expect(payload.series[0]!.metric).toBe("solana_reliability_sdk.custom.event.type");
+  });
 });

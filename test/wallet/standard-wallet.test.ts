@@ -281,4 +281,90 @@ describe("Wallet Standard Adapter", () => {
     expect(typeof index.createWalletStandardTransactionWallet).toBe("function");
     expect(index.SOLANA_SIGN_TRANSACTION).toBe("solana:signTransaction");
   });
+
+  // ─── signTransaction output validation branches ───────────────────────
+
+  it("throws when signFeature.signTransaction throws (line 141)", async () => {
+    const mockWallet = {
+      version: "1.0.0",
+      name: "Phantom",
+      chains: ["solana:mainnet"],
+      features: {
+        [SOLANA_SIGN_TRANSACTION]: {
+          version: "1.0.0",
+          signTransaction: vi.fn().mockRejectedValue(new Error("Hardware error")),
+        },
+      },
+      accounts: [mockSolanaAccount],
+    };
+
+    const adapter = createWalletStandardTransactionWallet(mockWallet);
+    await expect(adapter.signTransaction(unsignedBase64)).rejects.toMatchObject({
+      kind: "InvalidTransaction",
+      message: expect.stringContaining("Wallet signTransaction call failed"),
+    });
+  });
+
+  it("throws when signTransaction returns empty outputs array (line 145)", async () => {
+    const mockWallet = {
+      version: "1.0.0",
+      name: "Phantom",
+      chains: ["solana:mainnet"],
+      features: {
+        [SOLANA_SIGN_TRANSACTION]: {
+          version: "1.0.0",
+          signTransaction: vi.fn().mockResolvedValue([]),
+        },
+      },
+      accounts: [mockSolanaAccount],
+    };
+
+    const adapter = createWalletStandardTransactionWallet(mockWallet);
+    await expect(adapter.signTransaction(unsignedBase64)).rejects.toMatchObject({
+      kind: "InvalidTransaction",
+      message: expect.stringContaining("empty or invalid outputs"),
+    });
+  });
+
+  it("throws when output is missing signedTransaction Uint8Array (line 150)", async () => {
+    const mockWallet = {
+      version: "1.0.0",
+      name: "Phantom",
+      chains: ["solana:mainnet"],
+      features: {
+        [SOLANA_SIGN_TRANSACTION]: {
+          version: "1.0.0",
+          signTransaction: vi.fn().mockResolvedValue([{ signedTransaction: "not-a-uint8array" }]),
+        },
+      },
+      accounts: [mockSolanaAccount],
+    };
+
+    const adapter = createWalletStandardTransactionWallet(mockWallet);
+    await expect(adapter.signTransaction(unsignedBase64)).rejects.toMatchObject({
+      kind: "InvalidTransaction",
+      message: expect.stringContaining("missing signedTransaction bytes"),
+    });
+  });
+
+  it("throws on empty base64 input to signTransaction (line 114)", async () => {
+    const mockWallet = {
+      version: "1.0.0",
+      name: "Phantom",
+      chains: ["solana:mainnet"],
+      features: {
+        [SOLANA_SIGN_TRANSACTION]: {
+          version: "1.0.0",
+          signTransaction: vi.fn(),
+        },
+      },
+      accounts: [mockSolanaAccount],
+    };
+
+    const adapter = createWalletStandardTransactionWallet(mockWallet);
+    await expect(adapter.signTransaction("")).rejects.toMatchObject({
+      kind: "InvalidTransaction",
+      message: expect.stringContaining("base64"),
+    });
+  });
 });

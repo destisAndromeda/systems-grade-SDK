@@ -155,25 +155,66 @@ describe("createHealthReport", () => {
   });
 
   it("returns health report for valid endpoints", async () => {
-    const result = await createHealthReport(["https://api.mainnet-beta.solana.com"]);
+    const url = "https://api.mainnet-beta.solana.com";
+    const id = endpointIdFor(url);
+    const fakeTransport = createFakeRpcTransport({
+      endpointUrl: url,
+      endpointId: id,
+      responses: new Map([["getHealth", { success: "ok" }]]),
+    });
+
+    const result = await createHealthReport([url], undefined, {
+      transports: new Map([[id, fakeTransport]]),
+    });
     expect(result).not.toContain("Usage");
     expect(result).toContain("RPC Health Report");
+    expect(result).toContain("- https://api.mainnet-beta.solana.com: ok");
   });
 
   it("includes multiple endpoints in report", async () => {
-    const result = await createHealthReport([
-      "https://api.mainnet-beta.solana.com",
-      "https://backup.rpc.solana.com",
-    ]);
+    const url1 = "https://api.mainnet-beta.solana.com";
+    const id1 = endpointIdFor(url1);
+    const url2 = "https://backup.rpc.solana.com";
+    const id2 = endpointIdFor(url2);
 
-    expect(result).toContain("https://api.mainnet-beta.solana.com");
-    expect(result).toContain("https://backup.rpc.solana.com");
+    const fakeTransport1 = createFakeRpcTransport({
+      endpointUrl: url1,
+      endpointId: id1,
+      responses: new Map([["getHealth", { success: "ok" }]]),
+    });
+    const fakeTransport2 = createFakeRpcTransport({
+      endpointUrl: url2,
+      endpointId: id2,
+      responses: new Map([["getHealth", { success: "ok" }]]),
+    });
+
+    const result = await createHealthReport([url1, url2], undefined, {
+      transports: new Map([
+        [id1, fakeTransport1],
+        [id2, fakeTransport2],
+      ]),
+    });
+
+    expect(result).toContain(url1);
+    expect(result).toContain(url2);
+    expect(result).toContain("- https://api.mainnet-beta.solana.com: ok");
+    expect(result).toContain("- https://backup.rpc.solana.com: ok");
   });
 
   it("does not make real network calls", async () => {
+    const url = "https://api.mainnet-beta.solana.com";
+    const id = endpointIdFor(url);
+    const fakeTransport = createFakeRpcTransport({
+      endpointUrl: url,
+      endpointId: id,
+      responses: new Map([["getHealth", { success: "ok" }]]),
+    });
+
     // This should complete quickly with fake transports
     const start = Date.now();
-    const result = await createHealthReport(["https://api.mainnet-beta.solana.com"]);
+    const result = await createHealthReport([url], undefined, {
+      transports: new Map([[id, fakeTransport]]),
+    });
     const elapsed = Date.now() - start;
 
     // Should complete in less than 100ms (no real network)
@@ -232,6 +273,44 @@ describe("createActiveHealthReport", () => {
     // Report still rendered, probe shows error
     expect(result).toContain("RPC Endpoint Health");
     expect(result).toContain("Probe: error");
+  });
+
+  it("handles failing endpoint in createHealthReport", async () => {
+    const url = "https://api.failed.test";
+    const id = endpointIdFor(url);
+    const { createSdkError } = await import("../../src/core/error.js");
+    const fakeError = createSdkError("NetworkError", "connection timed out");
+
+    const fakeTransport = createFakeRpcTransport({
+      endpointUrl: url,
+      endpointId: id,
+      responses: new Map([["getHealth", { error: fakeError }]]),
+    });
+
+    const result = await createHealthReport([url], undefined, {
+      transports: new Map([[id, fakeTransport]]),
+    });
+
+    expect(result).toContain("RPC Health Report");
+    expect(result).toContain("- https://api.failed.test: error");
+  });
+
+  it("returns error message if SDK creation fails in createActiveHealthReport", async () => {
+    // Pass an invalid URL that fails normalizeRpcEndpointConfig validation
+    const result = await createActiveHealthReport(["not-a-valid-url"]);
+    expect(result).toContain("Error creating SDK");
+  });
+
+  it("covers fallback createHttpRpcTransport without real network call", async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn().mockImplementation(() => Promise.reject(new Error("Mocked fetch error")));
+
+    try {
+      const result = await createHealthReport(["http://localhost:12345/health-fallback"]);
+      expect(result).toContain("error");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 });
 
