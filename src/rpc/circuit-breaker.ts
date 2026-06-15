@@ -1,88 +1,154 @@
-/**
- * Circuit breaker logic.
- *
- * Functions to determine when to open/close circuit for an endpoint,
- * preventing repeated requests to a failing endpoint.
- */
+import type { RpcEndpointState, CircuitBreakerConfig, CircuitState } from "./types.js";
 
-import type { RpcEndpointState, CircuitBreakerConfig } from "./types.js";
+/**
+ * Get the current circuit state, transitioning to half_open if cooldown has elapsed.
+ */
+export function getCircuitState(
+  state: RpcEndpointState,
+  nowMs: number,
+): CircuitState {
+  if (state.circuitState === "open") {
+    const openedAt = state.circuitOpenedAt ?? 0;
+    if (nowMs >= openedAt + state.circuitCooldownMs) {
+      return "half_open";
+    }
+    return "open";
+  }
+  // Legacy compatibility: check circuitOpenUntil if circuitState is not explicitly "open"
+  if (state.circuitOpenUntil !== undefined && state.circuitOpenUntil > nowMs) {
+    return "open";
+  }
+  return state.circuitState;
+}
+
+/**
+ * Check if a request should be allowed (closed or half_open).
+ */
+export function shouldAllowRequest(
+  state: RpcEndpointState,
+  nowMs: number,
+): boolean {
+  const current = getCircuitState(state, nowMs);
+  return current === "closed" || current === "half_open";
+}
+
+/**
+ * Trip the circuit (transition to open state) with exponential backoff.
+ */
+export function tripCircuit(
+  state: RpcEndpointState,
+  nowMs: number,
+): RpcEndpointState {
+  const isReopen = state.circuitState === "half_open" || getCircuitState(state, nowMs) === "half_open";
+  const nextCooldown = isReopen ? Math.min(30_000, state.circuitCooldownMs * 2) : state.circuitCooldownMs;
+  return {
+    ...state,
+    circuitState: "open",
+    circuitOpenedAt: nowMs,
+    circuitOpenUntil: nowMs + nextCooldown,
+    circuitCooldownMs: nextCooldown,
+  };
+}
+
+/**
+ * Record a circuit success, closing the circuit.
+ */
+export function recordCircuitSuccess(
+  state: RpcEndpointState,
+): RpcEndpointState {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { circuitOpenedAt: _oa, circuitOpenUntil: _ou, ...rest } = state;
+  return {
+    ...rest,
+    circuitState: "closed",
+    consecutiveFailures: 0,
+    circuitCooldownMs: state.config.circuitCooldownMs ?? 1_000,
+  };
+}
+
+/**
+ * Record a circuit failure. If in half_open, immediately trips the circuit.
+ */
+export function recordCircuitFailure(
+  state: RpcEndpointState,
+  nowMs: number,
+): RpcEndpointState {
+  const consecutiveFailures = state.consecutiveFailures + 1;
+  const failureState = {
+    ...state,
+    consecutiveFailures,
+    lastFailureAt: nowMs,
+  };
+  if (state.circuitState === "half_open" || getCircuitState(state, nowMs) === "half_open") {
+    return tripCircuit(failureState, nowMs);
+  }
+  return failureState;
+}
 
 /**
  * Check if an endpoint's circuit should be opened.
  *
- * Opens when consecutive failures reach the threshold.
- *
- * @param state Endpoint state
- * @param config Circuit breaker configuration
- * @returns true if circuit should be opened
+ * Opens when consecutive failures reach the threshold, or if in half-open state.
  */
 export function shouldOpenCircuit(
   state: RpcEndpointState,
   config: CircuitBreakerConfig,
 ): boolean {
-  return state.consecutiveFailures >= config.failureThreshold;
+  return state.circuitState === "half_open" || state.consecutiveFailures >= config.failureThreshold;
 }
 
 /**
  * Open a circuit for an endpoint.
- *
- * @param state Endpoint state
- * @param nowMs Current time
- * @param openDurationMs How long to keep circuit open
- * @returns Updated state with circuit open
  */
 export function openCircuit(
   state: RpcEndpointState,
   nowMs: number,
   openDurationMs: number,
 ): RpcEndpointState {
+  const isReopen = state.circuitState === "half_open" || getCircuitState(state, nowMs) === "half_open";
+  const nextCooldown = isReopen ? Math.min(30_000, state.circuitCooldownMs * 2) : openDurationMs;
   return {
     ...state,
-    circuitOpenUntil: nowMs + openDurationMs,
+    circuitState: "open",
+    circuitOpenedAt: nowMs,
+    circuitOpenUntil: nowMs + nextCooldown,
+    circuitCooldownMs: nextCooldown,
   };
 }
 
 /**
  * Check if a circuit is currently open.
- *
- * @param state Endpoint state
- * @param nowMs Current time
- * @returns true if circuit is open
  */
 export function isCircuitOpen(
   state: RpcEndpointState,
   nowMs: number,
 ): boolean {
-  return state.circuitOpenUntil !== undefined && state.circuitOpenUntil > nowMs;
+  return getCircuitState(state, nowMs) === "open";
 }
 
 /**
  * Maybe close a circuit if it has expired.
- *
- * Only resets the circuit and consecutive failures if:
- * - Circuit was previously opened (circuitOpenUntil is defined)
- * - AND the circuit duration has expired (circuitOpenUntil <= nowMs)
- *
- * @param state Endpoint state
- * @param nowMs Current time
- * @returns Updated state with circuit closed if expired, otherwise unchanged
  */
 export function maybeCloseCircuit(
   state: RpcEndpointState,
   nowMs: number,
 ): RpcEndpointState {
-  // Only reset if circuit was previously opened AND it has now expired
-  if (
-    state.circuitOpenUntil !== undefined &&
-    state.circuitOpenUntil <= nowMs
-  ) {
-    // Circuit was open but has now expired - reset it
-    const { circuitOpenUntil: _, ...rest } = state;
-    return {
-      ...rest,
-      consecutiveFailures: 0,
-    };
+  if (state.circuitOpenUntil !== undefined && state.circuitOpenUntil <= nowMs) {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { circuitOpenUntil: _ou, ...rest } = state;
+    if (state.circuitState === "open") {
+      return {
+        ...rest,
+        circuitState: "half_open" as const,
+      };
+    } else {
+      return {
+        ...rest,
+        circuitState: "closed" as const,
+        consecutiveFailures: 0,
+        circuitCooldownMs: state.config.circuitCooldownMs ?? 1_000,
+      };
+    }
   }
-  // Circuit never opened, still open, or not ready to close yet - return unchanged
   return state;
 }

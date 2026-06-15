@@ -8,6 +8,11 @@ import {
   openCircuit,
   isCircuitOpen,
   maybeCloseCircuit,
+  getCircuitState,
+  shouldAllowRequest,
+  tripCircuit,
+  recordCircuitSuccess,
+  recordCircuitFailure,
 } from "../../src/rpc/circuit-breaker.js";
 import { createInitialEndpointState } from "../../src/rpc/endpoint.js";
 
@@ -192,4 +197,102 @@ describe("maybeCloseCircuit", () => {
     expect(updated.circuitOpenUntil).toBeUndefined();
     expect(updated.consecutiveFailures).toBe(0);
   });
+
+  it("closed endpoint allows request", () => {
+    const state = createInitialEndpointState({ url: "https://api.com" });
+    expect(shouldAllowRequest(state, 100)).toBe(true);
+  });
+
+  it("failure threshold opens circuit", () => {
+    const state = {
+      ...createInitialEndpointState({ url: "https://api.com" }),
+      consecutiveFailures: 3,
+    };
+    const config = { failureThreshold: 3, openDurationMs: 1000 };
+    expect(shouldOpenCircuit(state, config)).toBe(true);
+    const opened = openCircuit(state, 100, 1000);
+    expect(opened.circuitState).toBe("open");
+    expect(opened.circuitOpenedAt).toBe(100);
+    expect(opened.circuitOpenUntil).toBe(1100);
+  });
+
+  it("open circuit blocks request before cooldown", () => {
+    const state = {
+      ...createInitialEndpointState({ url: "https://api.com" }),
+      circuitState: "open" as const,
+      circuitOpenedAt: 100,
+      circuitCooldownMs: 1000,
+      circuitOpenUntil: 1100,
+    };
+    expect(shouldAllowRequest(state, 1000)).toBe(false);
+    expect(isCircuitOpen(state, 1000)).toBe(true);
+  });
+
+  it("open circuit becomes half-open after cooldown", () => {
+    const state = {
+      ...createInitialEndpointState({ url: "https://api.com" }),
+      circuitState: "open" as const,
+      circuitOpenedAt: 100,
+      circuitCooldownMs: 1000,
+      circuitOpenUntil: 1100,
+    };
+    expect(getCircuitState(state, 1150)).toBe("half_open");
+    expect(shouldAllowRequest(state, 1150)).toBe(true);
+    expect(isCircuitOpen(state, 1150)).toBe(false);
+  });
+
+  it("half-open success closes circuit", () => {
+    const state = {
+      ...createInitialEndpointState({ url: "https://api.com" }),
+      circuitState: "half_open" as const,
+      consecutiveFailures: 3,
+      circuitCooldownMs: 2000,
+    };
+    const updated = recordCircuitSuccess(state);
+    expect(updated.circuitState).toBe("closed");
+    expect(updated.consecutiveFailures).toBe(0);
+    expect(updated.circuitCooldownMs).toBe(1000);
+  });
+
+  it("half-open failure reopens circuit and increases cooldown with cap", () => {
+    const state = {
+      ...createInitialEndpointState({ url: "https://api.com" }),
+      circuitState: "half_open" as const,
+      circuitCooldownMs: 1000,
+    };
+    const updated = recordCircuitFailure(state, 200);
+    expect(updated.circuitState).toBe("open");
+    expect(updated.circuitCooldownMs).toBe(2000);
+    expect(updated.circuitOpenedAt).toBe(200);
+
+    const stateAtCap = {
+      ...createInitialEndpointState({ url: "https://api.com" }),
+      circuitState: "half_open" as const,
+      circuitCooldownMs: 20000,
+    };
+    const updatedCap = recordCircuitFailure(stateAtCap, 300);
+    expect(updatedCap.circuitCooldownMs).toBe(30000);
+  });
+
+  it("repeated openings increase cooldown exponentially", () => {
+    let state = createInitialEndpointState({ url: "https://api.com" });
+    // First trip
+    state = tripCircuit(state, 100);
+    expect(state.circuitCooldownMs).toBe(1000);
+
+    // Cooldown elapsed, becomes half-open
+    expect(getCircuitState(state, 1200)).toBe("half_open");
+    state.circuitState = "half_open"; // Simulating transition
+
+    // Second trip (failure in half_open)
+    state = tripCircuit(state, 1200);
+    expect(state.circuitCooldownMs).toBe(2000);
+
+    // Third trip
+    state.circuitState = "half_open";
+    state = tripCircuit(state, 3500);
+    expect(state.circuitCooldownMs).toBe(4000);
+  });
 });
+
+

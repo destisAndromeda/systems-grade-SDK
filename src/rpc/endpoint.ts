@@ -6,6 +6,7 @@
  */
 
 import type { RpcEndpointConfig, RpcEndpointState, EndpointAttemptOutcome } from "./types.js";
+import { getCircuitState } from "./circuit-breaker.js";
 import type { SdkError } from "../core/error.js";
 import { err, ok, type Result } from "../core/result.js";
 import { createSdkError } from "../core/error.js";
@@ -75,6 +76,10 @@ export function createInitialEndpointState(config: RpcEndpointConfig): RpcEndpoi
     failureCount: 0,
     consecutiveFailures: 0,
     avgLatencyMs: 0,
+    circuitState: "closed",
+    circuitCooldownMs: config.circuitCooldownMs ?? 1_000,
+    inFlightCount: 0,
+    slotLag: 0,
   };
 }
 
@@ -92,13 +97,16 @@ export function recordEndpointSuccess(
   const avgLatencyMs =
     (state.avgLatencyMs * state.successCount + latencyMs) / successCount;
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { circuitOpenedAt: _oa, circuitOpenUntil: _ou, ...rest } = state;
   return {
-    ...state,
+    ...rest,
     successCount,
-    failureCount: state.failureCount,
     consecutiveFailures: 0,
     avgLatencyMs,
     lastSuccessAt: nowMs,
+    circuitState: "closed" as const,
+    circuitCooldownMs: state.config.circuitCooldownMs ?? 1_000,
   };
 }
 
@@ -170,7 +178,7 @@ export function isEndpointHealthy(
   state: RpcEndpointState,
   nowMs: number,
 ): boolean {
-  // Endpoint is healthy if circuit is not open
-  // Note: circuit status is checked in scoring/selection logic
-  return !state.circuitOpenUntil || state.circuitOpenUntil <= nowMs;
+  // Endpoint is healthy if circuit is closed or half-open (ready for a probe)
+  const circuitState = getCircuitState(state, nowMs);
+  return circuitState !== "open";
 }

@@ -48,6 +48,7 @@ export type {
   EndpointScoreConfig,
   ResilientRpcConfig,
   ResilientRpcResult,
+  CircuitState,
 } from "./rpc/types.js";
 export {
   normalizeRpcEndpointConfig,
@@ -67,6 +68,11 @@ export {
   openCircuit,
   isCircuitOpen,
   maybeCloseCircuit,
+  getCircuitState,
+  shouldAllowRequest,
+  tripCircuit,
+  recordCircuitSuccess,
+  recordCircuitFailure,
 } from "./rpc/circuit-breaker.js";
 export {
   createRpcRequestContext,

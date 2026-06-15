@@ -26,6 +26,7 @@ import { recordEndpointSuccess, recordAttemptFailure, recordRequestFailure } fro
 import { shouldOpenCircuit, openCircuit, maybeCloseCircuit } from "./circuit-breaker.js";
 import { shouldRetry, computeBackoffMs } from "./retry.js";
 import { createRpcRequestContext, executeRpcAttempt } from "./transport.js";
+import { classifyError, isEndpointFault } from "./error-classifier.js";
 
 /**
  * Dependencies for resilient RPC client.
@@ -141,21 +142,43 @@ export async function executeResilientRpcRequest<TParams, TResult>(
       continue;
     }
 
+    // Increment inFlightCount immediately before sending
+    const currentEndpointState = deps.registry.getById(selectedState.id) ?? selectedState;
+    const incrementedState = {
+      ...currentEndpointState,
+      inFlightCount: (currentEndpointState.inFlightCount ?? 0) + 1,
+    };
+    deps.registry.upsert(incrementedState);
+
     // Determine timeout for this request
     const timeoutMs = selectedState.config.timeoutMs ?? config.defaultTimeoutMs;
 
     // Create request context
     const context = createRpcRequestContext(method, params, startedAtMs, timeoutMs);
 
-    // Execute the RPC attempt
-    const attemptResult = await executeRpcAttempt(transport, context, deps.clock, deps.timer);
+    let attemptResult;
+    try {
+      // Execute the RPC attempt
+      attemptResult = await executeRpcAttempt(transport, context, deps.clock, deps.timer);
+    } finally {
+      // Decrement inFlightCount
+      const freshState = deps.registry.getById(selectedState.id);
+      if (freshState) {
+        const decrementedState = {
+          ...freshState,
+          inFlightCount: Math.max(0, (freshState.inFlightCount ?? 0) - 1),
+        };
+        deps.registry.upsert(decrementedState);
+      }
+    }
 
     // Track latency
     totalLatencyMs += attemptResult.latencyMs;
 
     // Handle success
     if (attemptResult.kind === "success") {
-      const successState = recordEndpointSuccess(selectedState, attemptResult.latencyMs, nowMs);
+      const freshState = deps.registry.getById(selectedState.id) ?? selectedState;
+      const successState = recordEndpointSuccess(freshState, attemptResult.latencyMs, nowMs);
       deps.registry.upsert(successState);
 
       return ok({
@@ -166,8 +189,21 @@ export async function executeResilientRpcRequest<TParams, TResult>(
       });
     }
 
-    // Handle attempt failure - record for circuit breaker tracking
-    let failureState = recordAttemptFailure(selectedState, nowMs);
+    // Handle attempt failure
+    // First, classify the error to determine if it's an endpoint fault
+    const errorClass = classifyError(attemptResult.error);
+
+    lastError = attemptResult.error;
+
+    // If not an endpoint fault (e.g., RPC error), return immediately without retry
+    if (!isEndpointFault(errorClass)) {
+      // Record as request failure without updating endpoint health/circuit
+      return err(attemptResult.error);
+    }
+
+    // For endpoint faults, record for circuit breaker and health tracking
+    const freshState = deps.registry.getById(selectedState.id) ?? selectedState;
+    let failureState = recordAttemptFailure(freshState, nowMs);
 
     // Check if circuit should open
     if (shouldOpenCircuit(failureState, config.circuitBreaker)) {
@@ -176,8 +212,6 @@ export async function executeResilientRpcRequest<TParams, TResult>(
     } else {
       deps.registry.upsert(failureState);
     }
-
-    lastError = attemptResult.error;
 
     // Check if should retry
     if (!shouldRetry(attemptResult, attempts, config.retry)) {

@@ -85,6 +85,22 @@ describe("scoreEndpoint", () => {
     const score = scoreEndpoint(state, scoreConfig, 1000);
     expect(Number.isNaN(score)).toBe(false);
   });
+
+  it("endpoint with higher inFlightCount receives higher (worse) score", () => {
+    const state1 = { ...createInitialEndpointState({ url: "https://api1.com" }), avgLatencyMs: 100, inFlightCount: 0 };
+    const state2 = { ...createInitialEndpointState({ url: "https://api2.com" }), avgLatencyMs: 100, inFlightCount: 1 };
+    const score1 = scoreEndpoint(state1, scoreConfig, 1000);
+    const score2 = scoreEndpoint(state2, scoreConfig, 1000);
+    expect(score2).toBeGreaterThan(score1);
+  });
+
+  it("scoring penalizes lagging endpoint with higher (worse) score", () => {
+    const state1 = { ...createInitialEndpointState({ url: "https://api1.com" }), avgLatencyMs: 100, slotLag: 0 };
+    const state2 = { ...createInitialEndpointState({ url: "https://api2.com" }), avgLatencyMs: 100, slotLag: 50 };
+    const score1 = scoreEndpoint(state1, scoreConfig, 1000);
+    const score2 = scoreEndpoint(state2, scoreConfig, 1000);
+    expect(score2).toBeGreaterThan(score1);
+  });
 });
 
 describe("isEndpointCircuitOpen", () => {

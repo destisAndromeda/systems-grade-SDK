@@ -144,6 +144,23 @@ describe("createInitialEndpointState", () => {
   it("circuit is not open initially", () => {
     const state = createInitialEndpointState({ url: "https://api.solana.com" });
     expect(state.circuitOpenUntil).toBeUndefined();
+    expect(state.circuitState).toBe("closed");
+    expect(state.circuitOpenedAt).toBeUndefined();
+  });
+
+  it("initial cooldown is set", () => {
+    const stateDefault = createInitialEndpointState({ url: "https://api.solana.com" });
+    expect(stateDefault.circuitCooldownMs).toBe(1_000);
+
+    const stateConfig = createInitialEndpointState({ url: "https://api.solana.com", circuitCooldownMs: 5_000 });
+    expect(stateConfig.circuitCooldownMs).toBe(5_000);
+  });
+
+  it("initializes inFlightCount and slotLag to zero", () => {
+    const state = createInitialEndpointState({ url: "https://api.solana.com" });
+    expect(state.inFlightCount).toBe(0);
+    expect(state.slotLag).toBe(0);
+    expect(state.lastObservedSlot).toBeUndefined();
   });
 
   it("state contains endpoint id and normalized config/url", () => {
@@ -309,5 +326,60 @@ describe("isEndpointHealthy", () => {
     };
     expect(isEndpointHealthy(state, 1000)).toBe(true);
     expect(isEndpointHealthy(state, 2000)).toBe(true);
+  });
+
+  it("returns true for half-open circuit (cooldown elapsed)", () => {
+    const state = {
+      ...createInitialEndpointState({ url: "https://api.solana.com" }),
+      circuitState: "open" as const,
+      circuitOpenedAt: 1000,
+      circuitCooldownMs: 500,
+      circuitOpenUntil: 1500,
+    };
+    // Before cooldown: open → unhealthy
+    expect(isEndpointHealthy(state, 1200)).toBe(false);
+    // After cooldown: half_open → healthy (can probe)
+    expect(isEndpointHealthy(state, 1600)).toBe(true);
+  });
+});
+
+describe("recordEndpointSuccess circuit reset", () => {
+  it("closes an open circuit on success", () => {
+    const state = {
+      ...createInitialEndpointState({ url: "https://api.solana.com" }),
+      circuitState: "open" as const,
+      circuitOpenedAt: 100,
+      circuitOpenUntil: 1100,
+      circuitCooldownMs: 1000,
+      consecutiveFailures: 3,
+    };
+    const updated = recordEndpointSuccess(state, 50, 200);
+    expect(updated.circuitState).toBe("closed");
+    expect(updated.consecutiveFailures).toBe(0);
+    expect((updated as any).circuitOpenedAt).toBeUndefined();
+    expect((updated as any).circuitOpenUntil).toBeUndefined();
+  });
+
+  it("closes a half-open circuit on success", () => {
+    const state = {
+      ...createInitialEndpointState({ url: "https://api.solana.com" }),
+      circuitState: "half_open" as const,
+      consecutiveFailures: 2,
+      circuitCooldownMs: 2000,
+    };
+    const updated = recordEndpointSuccess(state, 50, 200);
+    expect(updated.circuitState).toBe("closed");
+    expect(updated.consecutiveFailures).toBe(0);
+    expect(updated.circuitCooldownMs).toBe(1000); // reset to config default
+  });
+
+  it("resets circuitCooldownMs to config value on success", () => {
+    const state = {
+      ...createInitialEndpointState({ url: "https://api.solana.com", circuitCooldownMs: 5000 }),
+      circuitState: "half_open" as const,
+      circuitCooldownMs: 20000, // was doubled due to repeated trips
+    };
+    const updated = recordEndpointSuccess(state, 50, 200);
+    expect(updated.circuitCooldownMs).toBe(5000);
   });
 });

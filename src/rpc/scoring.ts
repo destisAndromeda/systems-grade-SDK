@@ -10,12 +10,12 @@ import type { Result } from "../core/result.js";
 import type { SdkError } from "../core/error.js";
 import { ok, err } from "../core/result.js";
 import { createSdkError } from "../core/error.js";
+import { isCircuitOpen } from "./circuit-breaker.js";
 
 /**
  * Score an endpoint (lower is better).
  *
- * Combines latency, failure rate, and recent failure penalty.
- * Higher latency and more failures = higher (worse) score.
+ * Combines latency, failure rate, recent failure penalty, in-flight load penalty, and slot lag penalty.
  *
  * @param state Endpoint state to score
  * @param config Scoring weights
@@ -45,6 +45,16 @@ export function scoreEndpoint(
     score += recencyFactor * config.recentFailurePenalty;
   }
 
+  // Phase 2.3 — in-flight load penalty: each concurrent request adds a latency-equivalent penalty
+  // Uses the config latencyWeight so the penalty is on the same scale as latency score
+  const loadPenaltyMs = (state.inFlightCount ?? 0) * 50; // 50 ms equivalent per concurrent request
+  score += loadPenaltyMs * config.latencyWeight;
+
+  // Phase 2.5 — slot-lag penalty: penalise endpoints that are behind the cluster head slot.
+  // Each slot of lag adds a small latency-equivalent penalty (1 slot ≈ 400 ms on Solana mainnet).
+  const slotLagPenaltyMs = (state.slotLag ?? 0) * 10; // 10 ms equivalent per slot of lag
+  score += slotLagPenaltyMs * config.latencyWeight;
+
   return score;
 }
 
@@ -55,7 +65,7 @@ export function isEndpointCircuitOpen(
   state: RpcEndpointState,
   nowMs: number,
 ): boolean {
-  return state.circuitOpenUntil !== undefined && state.circuitOpenUntil > nowMs;
+  return isCircuitOpen(state, nowMs);
 }
 
 /**

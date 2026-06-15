@@ -5,12 +5,14 @@
 import { describe, it, expect } from "vitest";
 import { createResilientRpcClient, executeResilientRpcRequest } from "../../src/rpc/resilient-client.js";
 import { createEndpointRegistry } from "../../src/rpc/registry.js";
+import { isCircuitOpen } from "../../src/rpc/circuit-breaker.js";
 import { FakeClock } from "../../src/testing/fake-clock.js";
 import { FakeTimer } from "../../src/testing/fake-timer.js";
 import { FakeRandom } from "../../src/testing/fake-random.js";
 import { createFakeRpcTransport } from "../../src/testing/fake-transport.js";
 import { createSdkError, isKindOfSdkError } from "../../src/core/error.js";
 import { isOk } from "../../src/core/result.js";
+import type { RpcTransport } from "../../src/rpc/types.js";
 
 describe("executeResilientRpcRequest", () => {
   it("returns ok on first successful attempt", async () => {
@@ -849,6 +851,371 @@ describe("executeResilientRpcRequest", () => {
     const calls = transport.getCalls();
     expect(calls[0]!.options?.timeoutMs).toBe(3000);
   });
+
+  describe("RPC error handling (Phase 1.3)", () => {
+    it("JSON-RPC error from first endpoint returns immediately", async () => {
+      const registryResult = createEndpointRegistry(["https://api.solana.com"]);
+      expect(isOk(registryResult)).toBe(true);
+      if (!isOk(registryResult)) throw new Error("Failed to create registry");
+
+      const rpcError = createSdkError("InvalidResponse", "JSON-RPC error -32600: Invalid Request", {
+        retryable: false,
+      });
+      const transport = createFakeRpcTransport({
+        endpointUrl: "https://api.solana.com",
+        endpointId: "https_api_solana_com",
+        responses: new Map([["getBalance", { error: rpcError }]]),
+      });
+
+      const clock = new FakeClock();
+      const timer = new FakeTimer(clock);
+      const random = new FakeRandom([]);
+
+      const result = await executeResilientRpcRequest(
+        "getBalance",
+        { address: "test" },
+        new Map([["https_api_solana_com", transport]]),
+        {
+          retry: { maxAttempts: 3, baseDelayMs: 0, maxDelayMs: 1000, jitterRatio: 0.1 },
+          circuitBreaker: { failureThreshold: 3, openDurationMs: 10000 },
+          scoring: { latencyWeight: 1, failureWeight: 1, recentFailurePenalty: 1 },
+        },
+        { registry: registryResult.value, clock, timer, random },
+      );
+
+      expect(isOk(result)).toBe(false);
+      if (!isOk(result)) {
+        expect(isKindOfSdkError(result.error)).toBe(true);
+        if (isKindOfSdkError(result.error)) {
+          expect(result.error.kind).toBe("InvalidResponse");
+        }
+      }
+
+      // Verify only 1 attempt (no retries)
+      const calls = transport.getCalls();
+      expect(calls).toHaveLength(1);
+    });
+
+    it("JSON-RPC error does not trigger failover to second endpoint", async () => {
+      const registryResult = createEndpointRegistry(["https://api1.solana.com", "https://api2.solana.com"]);
+      expect(isOk(registryResult)).toBe(true);
+      if (!isOk(registryResult)) throw new Error("Failed to create registry");
+
+      const rpcError = createSdkError("InvalidResponse", "JSON-RPC error -32600: Invalid Request", {
+        retryable: false,
+      });
+      const transport1 = createFakeRpcTransport({
+        endpointUrl: "https://api1.solana.com",
+        endpointId: "https_api1_solana_com",
+        responses: new Map([["getBalance", { error: rpcError }]]),
+      });
+      const transport2 = createFakeRpcTransport({
+        endpointUrl: "https://api2.solana.com",
+        endpointId: "https_api2_solana_com",
+        responses: new Map([["getBalance", { success: 5000 }]]),
+      });
+
+      const clock = new FakeClock();
+      const timer = new FakeTimer(clock);
+      const random = new FakeRandom([]);
+
+      const result = await executeResilientRpcRequest(
+        "getBalance",
+        { address: "test" },
+        new Map([
+          ["https_api1_solana_com", transport1],
+          ["https_api2_solana_com", transport2],
+        ]),
+        {
+          retry: { maxAttempts: 3, baseDelayMs: 0, maxDelayMs: 1000, jitterRatio: 0.1 },
+          circuitBreaker: { failureThreshold: 3, openDurationMs: 10000 },
+          scoring: { latencyWeight: 1, failureWeight: 1, recentFailurePenalty: 1 },
+        },
+        { registry: registryResult.value, clock, timer, random },
+      );
+
+      expect(isOk(result)).toBe(false);
+
+      // Verify only transport1 was called (no failover to transport2)
+      const calls1 = transport1.getCalls();
+      const calls2 = transport2.getCalls();
+      expect(calls1).toHaveLength(1);
+      expect(calls2).toHaveLength(0);
+    });
+
+    it("JSON-RPC error does not increment consecutiveFailures", async () => {
+      const registryResult = createEndpointRegistry(["https://api.solana.com"]);
+      expect(isOk(registryResult)).toBe(true);
+      if (!isOk(registryResult)) throw new Error("Failed to create registry");
+
+      const rpcError = createSdkError("InvalidResponse", "JSON-RPC error -32600: Invalid Request", {
+        retryable: false,
+      });
+      const transport = createFakeRpcTransport({
+        endpointUrl: "https://api.solana.com",
+        endpointId: "https_api_solana_com",
+        responses: new Map([["getBalance", { error: rpcError }]]),
+      });
+
+      const clock = new FakeClock();
+      const timer = new FakeTimer(clock);
+      const random = new FakeRandom([]);
+      const registry = registryResult.value;
+
+      // Get initial state
+      const initialStates = registry.getAll();
+      expect(initialStates[0]?.consecutiveFailures).toBe(0);
+
+      await executeResilientRpcRequest(
+        "getBalance",
+        { address: "test" },
+        new Map([["https_api_solana_com", transport]]),
+        {
+          retry: { maxAttempts: 3, baseDelayMs: 0, maxDelayMs: 1000, jitterRatio: 0.1 },
+          circuitBreaker: { failureThreshold: 3, openDurationMs: 10000 },
+          scoring: { latencyWeight: 1, failureWeight: 1, recentFailurePenalty: 1 },
+        },
+        { registry, clock, timer, random },
+      );
+
+      // Check state after RPC error - consecutiveFailures should not be incremented
+      // because RPC errors are not endpoint faults
+      const finalStates = registry.getAll();
+      expect(finalStates[0]?.consecutiveFailures).toBe(0);
+    });
+
+    it("JSON-RPC error does not open circuit breaker even after repeated calls", async () => {
+      const registryResult = createEndpointRegistry(["https://api.solana.com"]);
+      expect(isOk(registryResult)).toBe(true);
+      if (!isOk(registryResult)) throw new Error("Failed to create registry");
+
+      const rpcError = createSdkError("InvalidResponse", "JSON-RPC error -32700: Parse error", {
+        retryable: false,
+      });
+      const transport = createFakeRpcTransport({
+        endpointUrl: "https://api.solana.com",
+        endpointId: "https_api_solana_com",
+        responses: new Map([
+          ["getBalance", { error: rpcError }],
+          ["getStatus", { error: rpcError }],
+          ["sendTransaction", { error: rpcError }],
+        ]),
+      });
+
+      const clock = new FakeClock();
+      const timer = new FakeTimer(clock);
+      const random = new FakeRandom([]);
+      const registry = registryResult.value;
+
+      // Make multiple requests that all fail with RPC errors
+      for (let i = 0; i < 5; i++) {
+        await executeResilientRpcRequest(
+          "getBalance",
+          { address: "test" },
+          new Map([["https_api_solana_com", transport]]),
+          {
+            retry: { maxAttempts: 3, baseDelayMs: 0, maxDelayMs: 1000, jitterRatio: 0.1 },
+            circuitBreaker: { failureThreshold: 3, openDurationMs: 10000 },
+            scoring: { latencyWeight: 1, failureWeight: 1, recentFailurePenalty: 1 },
+          },
+          { registry, clock, timer, random },
+        );
+      }
+
+      // Check state - circuit should still be closed
+      const finalStates = registry.getAll();
+      const now = clock.now();
+      expect(isCircuitOpen(finalStates[0]!, now)).toBe(false);
+      expect(finalStates[0]?.consecutiveFailures).toBe(0);
+    });
+
+    it("network error still triggers retry and failover to second endpoint", async () => {
+      const registryResult = createEndpointRegistry(["https://api1.solana.com", "https://api2.solana.com"]);
+      expect(isOk(registryResult)).toBe(true);
+      if (!isOk(registryResult)) throw new Error("Failed to create registry");
+
+      const networkError = createSdkError("NetworkError", "Connection refused", { retryable: true });
+      const transport1 = createFakeRpcTransport({
+        endpointUrl: "https://api1.solana.com",
+        endpointId: "https_api1_solana_com",
+        responses: new Map([["getBalance", { error: networkError }]]),
+      });
+      const transport2 = createFakeRpcTransport({
+        endpointUrl: "https://api2.solana.com",
+        endpointId: "https_api2_solana_com",
+        responses: new Map([["getBalance", { success: 5000 }]]),
+      });
+
+      const clock = new FakeClock();
+      const timer = new FakeTimer(clock);
+      const random = new FakeRandom([]);
+
+      const result = await executeResilientRpcRequest(
+        "getBalance",
+        { address: "test" },
+        new Map([
+          ["https_api1_solana_com", transport1],
+          ["https_api2_solana_com", transport2],
+        ]),
+        {
+          retry: { maxAttempts: 3, baseDelayMs: 0, maxDelayMs: 1000, jitterRatio: 0.1 },
+          circuitBreaker: { failureThreshold: 3, openDurationMs: 10000 },
+          scoring: { latencyWeight: 1, failureWeight: 1, recentFailurePenalty: 1 },
+        },
+        { registry: registryResult.value, clock, timer, random },
+      );
+
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value.value).toBe(5000);
+      }
+
+      // Verify both transports were called (failover happened)
+      const calls1 = transport1.getCalls();
+      const calls2 = transport2.getCalls();
+      expect(calls1.length).toBeGreaterThan(0);
+      expect(calls2.length).toBeGreaterThan(0);
+    });
+
+    it("timeout error still triggers retry and failover", async () => {
+      const registryResult = createEndpointRegistry(["https://api1.solana.com", "https://api2.solana.com"]);
+      expect(isOk(registryResult)).toBe(true);
+      if (!isOk(registryResult)) throw new Error("Failed to create registry");
+
+      const timeoutError = createSdkError("Timeout", "Request timed out", { retryable: true });
+      const transport1 = createFakeRpcTransport({
+        endpointUrl: "https://api1.solana.com",
+        endpointId: "https_api1_solana_com",
+        responses: new Map([["getBalance", { error: timeoutError }]]),
+      });
+      const transport2 = createFakeRpcTransport({
+        endpointUrl: "https://api2.solana.com",
+        endpointId: "https_api2_solana_com",
+        responses: new Map([["getBalance", { success: 5000 }]]),
+      });
+
+      const clock = new FakeClock();
+      const timer = new FakeTimer(clock);
+      const random = new FakeRandom([]);
+
+      const result = await executeResilientRpcRequest(
+        "getBalance",
+        { address: "test" },
+        new Map([
+          ["https_api1_solana_com", transport1],
+          ["https_api2_solana_com", transport2],
+        ]),
+        {
+          retry: { maxAttempts: 3, baseDelayMs: 0, maxDelayMs: 1000, jitterRatio: 0.1 },
+          circuitBreaker: { failureThreshold: 3, openDurationMs: 10000 },
+          scoring: { latencyWeight: 1, failureWeight: 1, recentFailurePenalty: 1 },
+        },
+        { registry: registryResult.value, clock, timer, random },
+      );
+
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value.value).toBe(5000);
+      }
+
+      // Verify failover happened
+      expect(transport2.getCalls().length).toBeGreaterThan(0);
+    });
+
+    it("rate-limit error still triggers retry and failover", async () => {
+      const registryResult = createEndpointRegistry(["https://api1.solana.com", "https://api2.solana.com"]);
+      expect(isOk(registryResult)).toBe(true);
+      if (!isOk(registryResult)) throw new Error("Failed to create registry");
+
+      const rateLimitError = createSdkError("RateLimited", "HTTP 429: Too Many Requests", {
+        retryable: true,
+      });
+      const transport1 = createFakeRpcTransport({
+        endpointUrl: "https://api1.solana.com",
+        endpointId: "https_api1_solana_com",
+        responses: new Map([["getBalance", { error: rateLimitError }]]),
+      });
+      const transport2 = createFakeRpcTransport({
+        endpointUrl: "https://api2.solana.com",
+        endpointId: "https_api2_solana_com",
+        responses: new Map([["getBalance", { success: 5000 }]]),
+      });
+
+      const clock = new FakeClock();
+      const timer = new FakeTimer(clock);
+      const random = new FakeRandom([]);
+
+      const result = await executeResilientRpcRequest(
+        "getBalance",
+        { address: "test" },
+        new Map([
+          ["https_api1_solana_com", transport1],
+          ["https_api2_solana_com", transport2],
+        ]),
+        {
+          retry: { maxAttempts: 3, baseDelayMs: 0, maxDelayMs: 1000, jitterRatio: 0.1 },
+          circuitBreaker: { failureThreshold: 3, openDurationMs: 10000 },
+          scoring: { latencyWeight: 1, failureWeight: 1, recentFailurePenalty: 1 },
+        },
+        { registry: registryResult.value, clock, timer, random },
+      );
+
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value.value).toBe(5000);
+      }
+
+      // Verify failover happened
+      expect(transport2.getCalls().length).toBeGreaterThan(0);
+    });
+
+    it("server error still triggers retry and failover", async () => {
+      const registryResult = createEndpointRegistry(["https://api1.solana.com", "https://api2.solana.com"]);
+      expect(isOk(registryResult)).toBe(true);
+      if (!isOk(registryResult)) throw new Error("Failed to create registry");
+
+      const serverError = createSdkError("NetworkError", "HTTP 500: Internal Server Error", {
+        retryable: true,
+      });
+      const transport1 = createFakeRpcTransport({
+        endpointUrl: "https://api1.solana.com",
+        endpointId: "https_api1_solana_com",
+        responses: new Map([["getBalance", { error: serverError }]]),
+      });
+      const transport2 = createFakeRpcTransport({
+        endpointUrl: "https://api2.solana.com",
+        endpointId: "https_api2_solana_com",
+        responses: new Map([["getBalance", { success: 5000 }]]),
+      });
+
+      const clock = new FakeClock();
+      const timer = new FakeTimer(clock);
+      const random = new FakeRandom([]);
+
+      const result = await executeResilientRpcRequest(
+        "getBalance",
+        { address: "test" },
+        new Map([
+          ["https_api1_solana_com", transport1],
+          ["https_api2_solana_com", transport2],
+        ]),
+        {
+          retry: { maxAttempts: 3, baseDelayMs: 0, maxDelayMs: 1000, jitterRatio: 0.1 },
+          circuitBreaker: { failureThreshold: 3, openDurationMs: 10000 },
+          scoring: { latencyWeight: 1, failureWeight: 1, recentFailurePenalty: 1 },
+        },
+        { registry: registryResult.value, clock, timer, random },
+      );
+
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value.value).toBe(5000);
+      }
+
+      // Verify failover happened
+      expect(transport2.getCalls().length).toBeGreaterThan(0);
+    });
+  });
 });
 
 describe("createResilientRpcClient", () => {
@@ -977,5 +1344,89 @@ describe("createResilientRpcClient", () => {
     const result = await client.send("getBalance", { address: "test" });
 
     expect(result).toBe(5000);
+  });
+
+  it("increments inFlightCount before request and decrements on success", async () => {
+    const registryResult = createEndpointRegistry(["https://api.solana.com"]);
+    expect(isOk(registryResult)).toBe(true);
+    if (!isOk(registryResult)) throw new Error("Failed to create registry");
+
+    let resolveRequest: any;
+    const requestPromise = new Promise((resolve) => {
+      resolveRequest = resolve;
+    });
+
+    const transport = {
+      endpointUrl: "https://api.solana.com",
+      endpointId: "https_api_solana_com",
+      send: async () => {
+        const state = registryResult.value.getById("https_api_solana_com");
+        expect(state?.inFlightCount).toBe(1);
+        await requestPromise;
+        return 1000;
+      },
+    } as unknown as RpcTransport;
+
+    const clock = new FakeClock();
+    const timer = new FakeTimer(clock);
+    const random = new FakeRandom([]);
+
+    const runPromise = executeResilientRpcRequest(
+      "getBalance",
+      { address: "test" },
+      new Map([["https_api_solana_com", transport]]),
+      {
+        retry: { maxAttempts: 3, baseDelayMs: 0, maxDelayMs: 1000, jitterRatio: 0.1 },
+        circuitBreaker: { failureThreshold: 3, openDurationMs: 10000 },
+        scoring: { latencyWeight: 1, failureWeight: 1, recentFailurePenalty: 1 },
+      },
+      { registry: registryResult.value, clock, timer, random },
+    );
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    resolveRequest();
+
+    const result = await runPromise;
+    expect(isOk(result)).toBe(true);
+
+    const stateAfter = registryResult.value.getById("https_api_solana_com");
+    expect(stateAfter?.inFlightCount).toBe(0);
+  });
+
+  it("decrements inFlightCount after thrown error", async () => {
+    const registryResult = createEndpointRegistry(["https://api.solana.com"]);
+    expect(isOk(registryResult)).toBe(true);
+    if (!isOk(registryResult)) throw new Error("Failed to create registry");
+
+    const transport = {
+      endpointUrl: "https://api.solana.com",
+      endpointId: "https_api_solana_com",
+      send: async () => {
+        const state = registryResult.value.getById("https_api_solana_com");
+        expect(state?.inFlightCount).toBe(1);
+        throw new Error("Some network error");
+      },
+    } as unknown as RpcTransport;
+
+    const clock = new FakeClock();
+    const timer = new FakeTimer(clock);
+    const random = new FakeRandom([]);
+
+    const result = await executeResilientRpcRequest(
+      "getBalance",
+      { address: "test" },
+      new Map([["https_api_solana_com", transport]]),
+      {
+        retry: { maxAttempts: 1, baseDelayMs: 0, maxDelayMs: 1000, jitterRatio: 0.1 },
+        circuitBreaker: { failureThreshold: 3, openDurationMs: 10000 },
+        scoring: { latencyWeight: 1, failureWeight: 1, recentFailurePenalty: 1 },
+      },
+      { registry: registryResult.value, clock, timer, random },
+    );
+
+    expect(isOk(result)).toBe(false);
+
+    const stateAfter = registryResult.value.getById("https_api_solana_com");
+    expect(stateAfter?.inFlightCount).toBe(0);
   });
 });

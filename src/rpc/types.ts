@@ -7,6 +7,8 @@
 
 import type { SdkError } from "../core/error.js";
 
+export type CircuitState = "closed" | "open" | "half_open";
+
 /**
  * Configuration for a single RPC endpoint.
  * Used by registry and transport creation.
@@ -16,6 +18,7 @@ export interface RpcEndpointConfig {
   weight?: number; // Load balancing weight (default: 1)
   timeoutMs?: number; // Timeout for calls to this endpoint
   headers?: Record<string, string>; // Custom HTTP headers
+  circuitCooldownMs?: number; // Cooldown duration for circuit breaker
 }
 
 /**
@@ -36,6 +39,12 @@ export interface RpcEndpointState {
 
   // Circuit breaker
   circuitOpenUntil?: number; // If set and > now(), circuit is open
+  circuitState: CircuitState;
+  circuitOpenedAt?: number;
+  circuitCooldownMs: number;
+  inFlightCount: number;
+  slotLag: number;
+  lastObservedSlot?: number;
 }
 
 /**
