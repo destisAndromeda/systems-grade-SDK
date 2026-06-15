@@ -139,29 +139,29 @@ describe("formatEndpointHealth", () => {
 });
 
 // ---------------------------------------------------------------------------
-// createHealthReport (sync, backward-compatible)
+// createHealthReport (async version required by Phase 9)
 // ---------------------------------------------------------------------------
 
 describe("createHealthReport", () => {
-  it("returns usage text when no endpoints provided", () => {
-    const result = createHealthReport([]);
+  it("returns usage text when no endpoints provided", async () => {
+    const result = await createHealthReport([]);
     expect(result).toContain("Usage");
     expect(result).toContain("health");
   });
 
-  it("returns usage text when endpoints array is empty", () => {
-    const result = createHealthReport([]);
+  it("returns usage text when endpoints array is empty", async () => {
+    const result = await createHealthReport([]);
     expect(result).toContain("Usage");
   });
 
-  it("returns health report for valid endpoints", () => {
-    const result = createHealthReport(["https://api.mainnet-beta.solana.com"]);
+  it("returns health report for valid endpoints", async () => {
+    const result = await createHealthReport(["https://api.mainnet-beta.solana.com"]);
     expect(result).not.toContain("Usage");
-    expect(result).toContain("RPC Endpoint Health");
+    expect(result).toContain("RPC Health Report");
   });
 
-  it("includes multiple endpoints in report", () => {
-    const result = createHealthReport([
+  it("includes multiple endpoints in report", async () => {
+    const result = await createHealthReport([
       "https://api.mainnet-beta.solana.com",
       "https://backup.rpc.solana.com",
     ]);
@@ -170,10 +170,10 @@ describe("createHealthReport", () => {
     expect(result).toContain("https://backup.rpc.solana.com");
   });
 
-  it("does not make real network calls", () => {
+  it("does not make real network calls", async () => {
     // This should complete quickly with fake transports
     const start = Date.now();
-    const result = createHealthReport(["https://api.mainnet-beta.solana.com"]);
+    const result = await createHealthReport(["https://api.mainnet-beta.solana.com"]);
     const elapsed = Date.now() - start;
 
     // Should complete in less than 100ms (no real network)
@@ -254,7 +254,7 @@ describe("watchHealth", () => {
     const written: string[] = [];
     const sleepCalls: number[] = [];
 
-    let fixedNow = new Date("2026-06-14T08:00:00.000Z").getTime();
+    const fixedNow = new Date("2026-06-14T08:00:00.000Z").getTime();
 
     await watchHealth(
       [url],
@@ -279,7 +279,7 @@ describe("watchHealth", () => {
     expect(written[0]).toContain("Updated:");
     expect(written[0]).toContain("2026-06-14");
     // health report present
-    expect(written[0]).toContain("RPC Endpoint Health");
+    expect(written[0]).toContain("RPC Health Report");
   });
 
   it("writes usage and returns when endpoints are missing", async () => {

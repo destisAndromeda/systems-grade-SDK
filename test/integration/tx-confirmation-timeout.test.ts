@@ -161,7 +161,7 @@ describe("Transaction Confirmation Timeout", () => {
     const clock = new FakeClock();
     const timer = new FakeTimer(clock);
 
-    let pollPromise = pollTransactionConfirmation(transport, "sig123", {
+    const pollPromise = pollTransactionConfirmation(transport, "sig123", {
       pollIntervalMs: 100,
       timeoutMs: 300,
       commitment: "confirmed",

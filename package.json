@@ -14,7 +14,8 @@
     }
   },
   "bin": {
-    "solana-reliability-sdk": "./dist/cli/main.js"
+    "solana-reliability-sdk": "./dist/cli/main.js",
+    "solana-sdk": "./dist/cli/main.js"
   },
   "files": [
     "dist",
@@ -28,6 +29,7 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "coverage": "vitest run --coverage",
+    "lint": "eslint .",
     "cli": "tsx src/cli/main.ts",
     "example:basic": "tsx examples/basic.ts",
     "example:relay-fallback": "tsx examples/relay-fallback.ts",
@@ -39,6 +41,7 @@
     "prepublishOnly": "npm run typecheck && npm test && npm run build"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@solana-program/system": "^0.12.2",
     "@solana-program/token": "^0.13.0",
     "@solana/kit": "^6.9.0",
@@ -46,10 +49,15 @@
     "@solana/kit-plugin-signer": "^0.10.0",
     "@types/node": "^25.9.3",
     "@vitest/coverage-v8": "^4.1.8",
+    "eslint": "^10.5.0",
     "fast-check": "^4.8.0",
     "tsup": "^8.5.1",
     "tsx": "^4.22.4",
     "typescript": "^5.9.3",
+    "typescript-eslint": "^8.61.0",
     "vitest": "^4.1.8"
+  },
+  "dependencies": {
+    "commander": "^15.0.0"
   }
 }

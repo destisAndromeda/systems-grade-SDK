@@ -190,7 +190,7 @@ describe("runTransactionLifecycle", () => {
   }
 
   it("tracks all signatures across resign epochs", async () => {
-    let currentHeight = 100;
+    const currentHeight = 100;
     const { deps, getStatusesCalls } = createMockDeps({
       getBlockHeight: async () => currentHeight,
       resign: async (previous, attempt) => {
@@ -242,7 +242,7 @@ describe("runTransactionLifecycle", () => {
   });
 
   it("returns landed result if any previous signature lands", async () => {
-    let currentHeight = 100;
+    const currentHeight = 100;
     const { deps } = createMockDeps({
       getBlockHeight: async () => currentHeight,
       resign: async () => ({ wire: "tx2", lastValidBlockHeight: 200 }),
@@ -282,7 +282,7 @@ describe("runTransactionLifecycle", () => {
   });
 
   it("does not resign until verified death passes two history sweeps", async () => {
-    let currentHeight = 101;
+    const currentHeight = 101;
     let resignCalled = false;
     const { deps, getStatusesCalls, clock } = createMockDeps({
       getBlockHeight: async () => currentHeight,
@@ -321,7 +321,7 @@ describe("runTransactionLifecycle", () => {
   });
 
   it("does not resign when first death sweep finds landed transaction", async () => {
-    let currentHeight = 101;
+    const currentHeight = 101;
     let resignCalled = false;
     const { deps } = createMockDeps({
       getBlockHeight: async () => currentHeight,
@@ -354,7 +354,7 @@ describe("runTransactionLifecycle", () => {
   });
 
   it("does not resign when second death sweep finds landed transaction", async () => {
-    let currentHeight = 101;
+    const currentHeight = 101;
     let resignCalled = false;
     let sweepCount = 0;
     const { deps } = createMockDeps({
@@ -391,7 +391,7 @@ describe("runTransactionLifecycle", () => {
   });
 
   it("throws TransactionExpiredError only after verified death", async () => {
-    let currentHeight = 101;
+    const currentHeight = 101;
     const { deps } = createMockDeps({
       getBlockHeight: async () => currentHeight,
     });
@@ -505,7 +505,7 @@ describe("runTransactionLifecycle", () => {
   });
 
   it("uses injectable clock for all sleeps", async () => {
-    let currentHeight = 100;
+    const currentHeight = 100;
     const { deps, clock } = createMockDeps({
       getBlockHeight: async () => currentHeight,
     });
@@ -533,7 +533,7 @@ describe("runTransactionLifecycle", () => {
   });
 
   it("does not drop old signatures after resign", async () => {
-    let currentHeight = 100;
+    const currentHeight = 100;
     const { deps, getStatusesCalls } = createMockDeps({
       getBlockHeight: async () => currentHeight,
       resign: async (previous, attempt) => {
@@ -690,7 +690,7 @@ describe("runTransactionLifecycle", () => {
   });
 
   it("rebroadcasts without dropping old signatures", async () => {
-    let height = 100;
+    const height = 100;
     const { deps, submitCalls, getStatusesCalls } = createMockDeps({
       getBlockHeight: async () => height,
       resign: async (previous, attempt) => {

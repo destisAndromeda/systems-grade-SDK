@@ -484,7 +484,7 @@ describe("pollTransactionConfirmation", () => {
     const clock = new FakeClock();
     const timer = new FakeTimer(clock);
 
-    let pollPromise = pollTransactionConfirmation(transport, "sig123", {
+    const pollPromise = pollTransactionConfirmation(transport, "sig123", {
       commitment: "confirmed",
       pollIntervalMs: 100,
       timeoutMs: 300,
@@ -610,7 +610,7 @@ describe("pollTransactionConfirmation", () => {
     const clock = new FakeClock();
     const timer = new FakeTimer(clock);
 
-    let pollPromise = pollTransactionConfirmation(transport, "sig123", {
+    const pollPromise = pollTransactionConfirmation(transport, "sig123", {
       commitment: "confirmed",
       pollIntervalMs: 100,
       timeoutMs: 250,
@@ -742,7 +742,7 @@ describe("pollTransactionConfirmation", () => {
     const clock = new FakeClock();
     const timer = new FakeTimer(clock);
 
-    let pollPromise = pollTransactionConfirmation(transport, "sig123", {
+    const pollPromise = pollTransactionConfirmation(transport, "sig123", {
       commitment: "confirmed",
       pollIntervalMs: 50,
       timeoutMs: 200,
@@ -773,7 +773,7 @@ describe("pollTransactionConfirmation", () => {
     const clock = new FakeClock();
     const timer = new FakeTimer(clock);
 
-    let pollPromise = pollTransactionConfirmation(transport, "sig123", {
+    const pollPromise = pollTransactionConfirmation(transport, "sig123", {
       commitment: "confirmed",
       pollIntervalMs: 100,
       timeoutMs: 250,
@@ -905,7 +905,7 @@ describe("confirmWithRebroadcast", () => {
   });
 
   it("confirmWithRebroadcast does not implement a conflicting single-signature algorithm", async () => {
-    let getStatusesCalls: any[] = [];
+    const getStatusesCalls: any[] = [];
     const transport = createFakeRpcTransport({
       endpointUrl: "https://api.test",
       endpointId: "test",

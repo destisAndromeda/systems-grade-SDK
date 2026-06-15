@@ -56,7 +56,7 @@ export function tripCircuit(
 export function recordCircuitSuccess(
   state: RpcEndpointState,
 ): RpcEndpointState {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+   
   const { circuitOpenedAt: _oa, circuitOpenUntil: _ou, ...rest } = state;
   return {
     ...rest,
@@ -134,7 +134,7 @@ export function maybeCloseCircuit(
   nowMs: number,
 ): RpcEndpointState {
   if (state.circuitOpenUntil !== undefined && state.circuitOpenUntil <= nowMs) {
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+     
     const { circuitOpenUntil: _ou, ...rest } = state;
     if (state.circuitState === "open") {
       return {

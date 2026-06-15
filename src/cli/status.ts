@@ -8,12 +8,10 @@ import type { RpcTransport } from "../rpc/types.js";
 import type { Result } from "../core/result.js";
 import type { SdkError } from "../core/error.js";
 import type { TransactionConfirmationStatus } from "../tx/types.js";
-import { createSdkError } from "../core/error.js";
-import { err } from "../core/result.js";
-import { fetchTransactionStatus } from "../tx/confirm.js";
 import { createHttpRpcTransport } from "../rpc/http-transport.js";
 import { createEndpointId, normalizeRpcEndpointConfig } from "../rpc/endpoint.js";
 import { isOk } from "../core/result.js";
+import { fetchTransactionStatus } from "../tx/confirm.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -85,13 +83,13 @@ export function formatTransactionStatus(
  * Uses a real HTTP transport by default; inject deps.transport in tests.
  *
  * @param signature Transaction signature to look up
- * @param options Command options (endpointUrl, timeoutMs)
+ * @param endpointOrOptions Endpoint URL string or Command options
  * @param deps Injectable dependencies for testing
  * @returns Formatted status string (never throws)
  */
 export async function createTransactionStatusReport(
   signature: string,
-  options: StatusCommandOptions,
+  endpointOrOptions: string | StatusCommandOptions,
   deps?: {
     transport?: RpcTransport;
   },
@@ -101,6 +99,8 @@ export async function createTransactionStatusReport(
     return `Usage: solana-reliability-sdk status <signature> --endpoint <rpc-url>\n\nMissing: <signature>`;
   }
 
+  const endpointUrl = typeof endpointOrOptions === "string" ? endpointOrOptions : endpointOrOptions?.endpointUrl;
+
   // Determine transport
   let transport: RpcTransport;
 
@@ -108,11 +108,11 @@ export async function createTransactionStatusReport(
     transport = deps.transport;
   } else {
     // Validate endpoint URL
-    if (!options.endpointUrl || options.endpointUrl.trim().length === 0) {
+    if (!endpointUrl || endpointUrl.trim().length === 0) {
       return `Usage: solana-reliability-sdk status <signature> --endpoint <rpc-url>\n\nMissing: --endpoint <rpc-url>`;
     }
 
-    const normalizeResult = normalizeRpcEndpointConfig(options.endpointUrl);
+    const normalizeResult = normalizeRpcEndpointConfig(endpointUrl);
     if (!isOk(normalizeResult)) {
       return `Error: Invalid endpoint URL: ${normalizeResult.error.message}`;
     }

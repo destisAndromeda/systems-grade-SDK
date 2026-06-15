@@ -8,6 +8,7 @@
 import type { RpcTransport } from "../rpc/types.js";
 import { createSolanaReliabilitySdk } from "../sdk/create-sdk.js";
 import { isOk } from "../core/result.js";
+import { createHttpRpcTransport } from "../rpc/http-transport.js";
 
 // ---------------------------------------------------------------------------
 // Option types
@@ -33,6 +34,15 @@ export interface HealthWatchOptions extends HealthProbeOptions {
   intervalMs?: number;
   /** Maximum number of iterations (useful for tests). Omit for infinite. */
   iterations?: number;
+}
+
+export interface HealthOptions {
+  iterations?: number;
+}
+
+export interface WatchHealthOptions {
+  intervalMs?: number;
+  iterations?: number; // Added to support test iteration limits without infinite loops
 }
 
 // ---------------------------------------------------------------------------
@@ -77,43 +87,58 @@ export function formatEndpointHealth(
 }
 
 // ---------------------------------------------------------------------------
-// One-shot (sync, backward-compatible)
+// createHealthReport (async version required by Phase 9)
 // ---------------------------------------------------------------------------
 
 /**
- * Create a health report for given endpoints (synchronous, no network calls).
+ * Create a health report for given endpoints.
  *
- * Creates an SDK instance with the provided endpoints and reports their health status.
- * Kept for backward compatibility; counters will show zero because no probe is issued.
- *
- * @param endpointUrls Array of RPC endpoint URLs
+ * @param endpoints Array of RPC endpoint URLs
+ * @param options Health report options
+ * @param deps Injectable dependencies for testing
  * @returns Health report as formatted text string
  */
-export function createHealthReport(endpointUrls: string[]): string {
-  if (!endpointUrls || endpointUrls.length === 0) {
+export async function createHealthReport(
+  endpoints: string[],
+  options?: HealthOptions,
+  deps?: {
+    transports?: Map<string, RpcTransport>;
+  },
+): Promise<string> {
+  if (!endpoints || endpoints.length === 0) {
     return `Usage: solana-reliability-sdk health <endpoint1> [endpoint2] ...\n\nExample:\n  solana-reliability-sdk health https://api.mainnet-beta.solana.com https://backup.rpc.solana.com`;
   }
 
-  // Create SDK with endpoints
-  const sdkResult = createSolanaReliabilitySdk({
-    endpoints: endpointUrls,
-  });
+  const lines: string[] = ["RPC Health Report"];
 
-  if (!isOk(sdkResult)) {
-    return `Error creating SDK: ${sdkResult.error.message}`;
+  for (const endpoint of endpoints) {
+    const id = endpoint.replace(/[^a-zA-Z0-9]/g, "_");
+    let transport: RpcTransport;
+    if (deps?.transports && deps.transports.has(id)) {
+      transport = deps.transports.get(id)!;
+    } else if (deps?.transports && deps.transports.has(endpoint)) {
+      transport = deps.transports.get(endpoint)!;
+    } else {
+      transport = createHttpRpcTransport({
+        endpointUrl: endpoint,
+        endpointId: id,
+      });
+    }
+
+    let status = "ok";
+    try {
+      await transport.send("getHealth", []);
+    } catch (error: unknown) {
+      status = "error";
+    }
+    lines.push(`- ${endpoint}: ${status}`);
   }
 
-  const sdk = sdkResult.value;
-
-  // Get endpoint health
-  const health = sdk.getEndpointHealth();
-
-  // Format and return health report
-  return formatEndpointHealth(health);
+  return lines.join("\n");
 }
 
 // ---------------------------------------------------------------------------
-// Active one-shot probe
+// Active one-shot probe (retained for backward compatibility/index exports)
 // ---------------------------------------------------------------------------
 
 /**
@@ -172,16 +197,13 @@ export async function createActiveHealthReport(
 /**
  * Continuously probe RPC endpoints and print health reports.
  *
- * Runs active health probes in a loop. Pass `deps.sleep`, `deps.write`, and
- * `options.iterations` in tests to make the loop deterministic and fast.
- *
- * @param endpointUrls Array of RPC endpoint URLs
- * @param options Watch options (interval, iterations, probe method/timeout)
+ * @param endpoints Array of RPC endpoint URLs
+ * @param options Watch options (interval, iterations)
  * @param deps Injected dependencies for testing (fake sleep, write, transport)
  */
 export async function watchHealth(
-  endpointUrls: string[],
-  options?: HealthWatchOptions,
+  endpoints: string[],
+  options?: WatchHealthOptions,
   deps?: {
     transports?: Map<string, RpcTransport>;
     sleep?: (ms: number) => Promise<void>;
@@ -192,23 +214,20 @@ export async function watchHealth(
   const write = deps?.write ?? ((text: string) => console.log(text));
   const sleep = deps?.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
   const nowMs = deps?.nowMs ?? (() => Date.now());
-  const intervalMs = options?.intervalMs ?? 2000;
+  const intervalMs = options?.intervalMs ?? 5000;
   const maxIterations = options?.iterations; // undefined = infinite
 
-  if (!endpointUrls || endpointUrls.length === 0) {
-    write(
-      `Usage: solana-reliability-sdk health [--watch] [--interval-ms <ms>] <endpoint1> [endpoint2] ...`,
-    );
+  if (!endpoints || endpoints.length === 0) {
+    write(`Usage: solana-sdk health <endpoints...>`);
     return;
   }
 
   let iteration = 0;
-  // eslint-disable-next-line no-constant-condition
   while (true) {
     const timestamp = new Date(nowMs()).toISOString();
-    const report = await createActiveHealthReport(
-      endpointUrls,
-      options,
+    const report = await createHealthReport(
+      endpoints,
+      {},
       deps?.transports ? { transports: deps.transports } : undefined,
     );
     write(`Updated: ${timestamp}\n${report}`);

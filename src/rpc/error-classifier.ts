@@ -43,7 +43,7 @@ export enum ErrorClass {
 export function classifyError(error: unknown): ErrorClass {
   // Extract error properties, handling both Error instances and plain objects
   let errorName = "";
-  let errorMessage = "";
+  let errorMessage: string;
   let errorKind = "";
   const errorCode = (error as any)?.code ?? (error as any)?.errno;
 

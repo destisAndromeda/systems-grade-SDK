@@ -144,12 +144,10 @@ describe("Datadog metrics exporter", () => {
   // ─── Test 2: non-2xx → sendDatadogMetrics returns err ─────────────────
 
   it("sendDatadogMetrics returns err when Datadog returns non-2xx", async () => {
-    let localServer: Server;
-
-    ({ server: localServer } = await startServer((_req, res) => {
+    const { server: localServer } = await startServer((_req, res) => {
       res.writeHead(500, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ error: "internal server error" }));
-    }));
+    });
     server = localServer;
 
     const { port } = localServer.address() as AddressInfo;

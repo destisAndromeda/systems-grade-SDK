@@ -97,7 +97,7 @@ export function recordEndpointSuccess(
   const avgLatencyMs =
     (state.avgLatencyMs * state.successCount + latencyMs) / successCount;
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+   
   const { circuitOpenedAt: _oa, circuitOpenUntil: _ou, ...rest } = state;
   return {
     ...rest,
